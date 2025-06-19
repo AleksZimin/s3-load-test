@@ -1,0 +1,41 @@
+[req]
+default_bits       = 2048
+prompt             = no
+default_md         = sha256
+req_extensions     = req_ext
+distinguished_name = dn
+
+[dn]
+C=XX
+ST=MinIO
+L=Cluster
+O=Local
+CN=storage-san-test
+
+[req_ext]
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1  = localhost
+DNS.2  = storage-san-test-0
+DNS.3  = storage-san-test-1
+DNS.4  = storage-san-test-2
+DNS.5  = storage-san-test-3
+DNS.6  = storage-san-test-4
+IP.1   = 10.200.0.67
+IP.2   = 10.200.0.68
+IP.3   = 10.200.0.69
+IP.4   = 10.200.0.70
+IP.5   = 10.200.0.71
+IP.6   = 10.210.0.67
+IP.7   = 10.210.0.68
+IP.8   = 10.210.0.69
+IP.9   = 10.210.0.70
+IP.10  = 10.210.0.71
+
+[ v3_ext ]
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names

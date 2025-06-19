@@ -1,0 +1,95 @@
+---
+- name: Manage MinIO TLS Configuration
+  hosts: all
+  gather_facts: true
+  vars:
+    tls: on  # change to 'off' to disable TLS
+    minio_user: minio-user
+    certs_local_dir: ~/development/minio/ansible/certs
+
+  tasks:
+    - name: Ensure remote certs dir exists
+      when: tls == 'on'
+      ansible.builtin.file:
+        path: "/home/{{ minio_user }}/.minio/certs"
+        state: directory
+        owner: "{{ minio_user }}"
+        mode: '0755'
+
+    - name: Upload cert and key to nodes
+      when: tls == 'on'
+      ansible.builtin.copy:
+        src: "{{ certs_local_dir }}/{{ item }}"
+        dest: "/home/{{ minio_user }}/.minio/certs/{{ item }}"
+        owner: "{{ minio_user }}"
+        mode: '0600'
+      loop:
+        - public.crt
+        - private.key
+
+    - name: Ensure remote nginx certs dir exists
+      when: tls == 'on'
+      ansible.builtin.file:
+        path: "//etc/nginx/ssl"
+        state: directory
+
+    - name: Upload cert to nginx on nodes
+      when: tls == 'on'
+      ansible.builtin.copy:
+        src: "{{ certs_local_dir }}/public.crt"
+        dest: "/etc/nginx/ssl/nginx.crt"
+
+    - name: Upload private key to nginx on nodes
+      when: tls == 'on'
+      ansible.builtin.copy:
+        src: "{{ certs_local_dir }}/private.key"
+        dest: "/etc/nginx/ssl/nginx.key"
+
+    - name: Upload CA cert to nodes
+      when: tls == 'on'
+      ansible.builtin.copy:
+        src: "{{ certs_local_dir }}/{{ item }}"
+        dest: "/etc/ssl/certs/minio-{{ item }}"
+        mode: '0666'
+      loop:
+        - ca.crt
+
+    - name: Remove certs from nodes if TLS is OFF
+      when: tls == 'off'
+      ansible.builtin.file:
+        path: "/home/{{ minio_user }}/.minio/certs"
+        state: absent
+
+    - name: Update /etc/default/minio (http→https)
+      when: tls == 'on'
+      ansible.builtin.replace:
+        path: /etc/default/minio
+        regexp: 'http://'
+        replace: 'https://'
+
+    - name: Update /etc/default/minio (https→http)
+      when: tls == 'off'
+      ansible.builtin.replace:
+        path: /etc/default/minio
+        regexp: 'https://'
+        replace: 'http://'
+
+    - name: Restart minio and nginx services
+      ansible.builtin.service:
+        name: "{{ item }}"
+        state: restarted
+        enabled: true
+      loop:
+      - nginx
+      - minio
+
+    - name: Ensure minio is running
+      ansible.builtin.service_facts:
+      register: svc
+
+    - name: Verify minio and nginx is active
+      ansible.builtin.assert:
+        that:
+          - svc.ansible_facts.services['minio.service'].state == "running"
+          - svc.ansible_facts.services['nginx.service'].state == "running"
+        fail_msg: "MinIO or Nginx is not running on {{ inventory_hostname }}"
