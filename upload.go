@@ -68,9 +68,13 @@ func uploadWorker(
 	for {
 		select {
 		case <-ctx.Done():
-			log.Debug("exiting worker")
+			log.Debug("canceled. exiting worker")
 			return
-		case job := <-jobs:
+		case job, ok := <-jobs:
+			if !ok {
+				log.Debug("jobs channel closed. exiting worker")
+				return
+			}
 			objectName := fmt.Sprintf("%sfile_%08d.txt", prefix, job)
 			log := log.With(
 				zap.String("name", objectName),
