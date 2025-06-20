@@ -22,12 +22,12 @@ import (
 )
 
 const (
-	endpoint           = "localhost:9000"
+	endpoint           = "localhost:19443"
 	accessKeyID        = "minioadmin"
 	secretAccessKey    = "minio-strong-secret"
 	useSSL             = true
 	bucketName         = "test-bucket"
-	prefix             = "small/"
+	prefix             = "large/"
 	workers            = 100
 	printProgressEvery = 512 // How often to update the percentage output
 )
