@@ -11,20 +11,16 @@ chown -R nginx:nginx /var/cache/nginx/s3_cache
 
 Note: User that nginx runs as can be taken from nginx.conf
 
-### Enabling cache in /etc/nginc/nginx.conf
+### Enabling of cache
 
-Add this to http block inside nginx.conf
 
 ```
-http {
-    ...
-    proxy_cache_path /var/cache/nginx/s3_cache levels=1:2 keys_zone=S3-cache:100m inactive=240h max_size=50g;
-    ...
-}
+    proxy_cache_path /var/cache/nginx/s3_cache levels=1:2 keys_zone=S3-cache:512m inactive=240h max_size=50g;
+
 ```
 
 `keys_zone=S3_cache` - name of cache (and folder created above)
-`100m` - memory cache for each thread
+`512m` - memory cache for each thread
 `inactive=240h` - cache time to live
 `max_size=50g` - max size that cache will take on disk
 
