@@ -50,12 +50,12 @@ const (
 	S3_ACCESS_KEY = "minioadmin"
 	S3_SECRET_KEY = "minio-strong-secret"
 
-	MODE_AI = "ai"
-	MODE_BS = "block"
+	MODE_AI     = "ai"
+	MODE_SIMPLE = "simple"
 )
 
 func main() {
-	MODES := fmt.Sprintf("(%s|%s)", MODE_AI, MODE_BS)
+	MODES := fmt.Sprintf("(%s|%s)", MODE_AI, MODE_SIMPLE)
 
 	mode := flag.String("mode", MODE_AI, fmt.Sprintf("Select mode (%s)", MODES))
 	s3Endpoint := flag.String("endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
@@ -64,7 +64,7 @@ func main() {
 	smallEnd := flag.Int("small-end", 0, "End of small file range")
 	smallCount := flag.Int("small-count", 1000, "Number of small files to read simultaneously")
 	cycles := flag.Int("cycles", -1, "Number of cycles per worker")
-	blockSize := flag.Int("block-size-mb", 10, "Large file download block size")
+	rangeSizeMb := flag.Int("range-size-mb", 10, "Large file download range size")
 	timeoutSeconds := flag.Int("connection-timeout", 0, "Connection timeout in seconds")
 	flag.Parse()
 
@@ -78,9 +78,9 @@ func main() {
 		  - Read small/file<rand(small-start, small-end)>.txt
 		  - <small-count> simultaneous:
 		  	- Read small/file<rand(small-start, small-end)>.txt
-			- Read block of <block-size-mb> size in random location of large/largefile_<rand(0, 50000)>.bin, assuming large file size 100Mb
-		- block:
-		  - Read block of <block-size-mb> size in random location of large/largefile_<rand(0, 50000)>.bin, assuming large file size 100Mb
+			- Read range of <range-size-mb> size in random location of large/largefile_<rand(small-start/1000, small-end/1000)>.txt, assuming large file size 100Mb
+		- simple:
+		  - Read range of <range-size-mb> size in random location of large/largefile_<rand(small-start/1000, small-end/1000)>.txt, assuming large file size 100Mb
 		
 		Common options:
 		- workers = amount of simultaneously running workers. Must be > 0.
@@ -147,6 +147,7 @@ func main() {
 
 	s3client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
+		o.DisableLogOutputChecksumValidationSkipped = true
 	})
 
 	scriptStartTime = time.Now()
@@ -165,9 +166,12 @@ func main() {
 
 				switch *mode {
 				case MODE_AI:
-					runAIWorker(ctx, worker, cycle, s3client, *smallStart, *smallEnd, *smallCount, *blockSize)
-				case MODE_BS:
-					readRandomLargeFileBlock(ctx, worker, cycle, s3client, *blockSize)
+					runAIWorker(ctx, worker, cycle, s3client, *smallStart, *smallEnd, *smallCount, *rangeSizeMb)
+				case MODE_SIMPLE:
+					idx := rand.Intn(*smallEnd-*smallStart+1) + *smallStart
+					largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
+
+					readRandomLargeFileRange(ctx, worker, cycle, s3client, *rangeSizeMb, largeFile)
 				}
 			}
 		}(worker)
@@ -175,7 +179,7 @@ func main() {
 	wg.Wait()
 }
 
-func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smallStart, smallEnd, smallCount, blockSizeMiB int) {
+func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smallStart, smallEnd, smallCount, rangeSizeMiB int) {
 	var wg sync.WaitGroup
 	// Read 1 random small file
 	smallIdx := rand.Intn(smallEnd-smallStart+1) + smallStart
@@ -186,9 +190,12 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 	wg.Add(smallCount)
 	for _ = range smallCount {
 		idx := rand.Intn(smallEnd-smallStart+1) + smallStart
-		smallFile = fmt.Sprintf("small/file_%08d.txt", idx)
-		go func(smallFile string) {
+
+		go func(idx int) {
 			defer wg.Done()
+
+			smallFile = fmt.Sprintf("small/file_%08d.txt", idx)
+			largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
 
 			select {
 			case <-ctx.Done():
@@ -204,22 +211,23 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 			default:
 			}
 
-			readRandomLargeFileBlock(ctx, worker, cycle, client, blockSizeMiB)
+			readRandomLargeFileRange(ctx, worker, cycle, client, rangeSizeMiB, largeFile)
 
-		}(smallFile)
+		}(idx)
 	}
 	wg.Wait()
 
 }
 
-func readRandomLargeFileBlock(ctx context.Context, worker int, cycle int, client *s3.Client, blockSizeMiB int) {
-	const largeMaxIndex = 50000
-	fileIdx := rand.Intn(largeMaxIndex) + 1
+func readRandomLargeFileRange(ctx context.Context, worker int, cycle int, client *s3.Client, rangeSizeMiB int, largeFile string) {
+	// const largeMaxIndex = 50000
+	// fileIdx := rand.Intn(largeMaxIndex) + 1
+	// file := fmt.Sprintf("large/file_%08d.txt", fileIdx)
 	const largeSize = 100 * 1024 * 1024
-	start := rand.Intn(largeSize - blockSizeMiB*1024*1024)
-	end := start + 1024*1024*blockSizeMiB
-	file := fmt.Sprintf("large/file_%08d.txt", fileIdx)
-	readLargeRange(ctx, client, worker, cycle, file, start, end)
+	start := rand.Intn(largeSize - rangeSizeMiB*1024*1024)
+	end := start + 1024*1024*rangeSizeMiB
+
+	readLargeRange(ctx, client, worker, cycle, largeFile, start, end)
 }
 
 func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key string) {
@@ -267,18 +275,20 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 	totalSpeed := float64(totalBytesRead) / elapsedScript.Seconds() / 1024 / 1024
 
 	simultaneous := atomic.AddInt64(&readSmallRunning, -1)
-	log.Printf(
-		"[W%d] Cycle %d: small %s in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
-		wid,
-		cycle,
-		key,
-		elapsed,
-		speed,
-		totalSpeed,
-		simultaneous,
-		atomic.LoadUint64(&failureCountSmall),
-		atomic.LoadUint64(&requestCountSmall),
-	)
+	if atomic.LoadUint64(&requestCountSmall)%1000 == 0 {
+		log.Printf(
+			"[W%d] Cycle %d: small %s in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			wid,
+			cycle,
+			key,
+			elapsed,
+			speed,
+			totalSpeed,
+			simultaneous,
+			atomic.LoadUint64(&failureCountSmall),
+			atomic.LoadUint64(&requestCountSmall),
+		)
+	}
 }
 
 func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key string, startByte, endByte int) {
@@ -338,17 +348,19 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	totalSpeed := float64(totalBytesRead) / elapsedScript.Seconds() / 1024 / 1024
 
 	simultaneous := atomic.AddInt64(&readLargeRunning, -1)
-	log.Printf(
-		"[W%d] Cycle %d: range %s (%d bytes) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
-		wid,
-		cycle,
-		key,
-		readBytes,
-		elapsed,
-		speed,
-		totalSpeed,
-		simultaneous,
-		atomic.LoadUint64(&failureCountLarge),
-		atomic.LoadUint64(&requestCountLarge),
-	)
+	if atomic.LoadUint64(&requestCountLarge)%500 == 0 {
+		log.Printf(
+			"[W%d] Cycle %d: range %s (%d bytes) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			wid,
+			cycle,
+			key,
+			readBytes,
+			elapsed,
+			speed,
+			totalSpeed,
+			simultaneous,
+			atomic.LoadUint64(&failureCountLarge),
+			atomic.LoadUint64(&requestCountLarge),
+		)
+	}
 }
