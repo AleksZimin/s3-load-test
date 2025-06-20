@@ -348,7 +348,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	totalSpeed := float64(totalBytesRead) / elapsedScript.Seconds() / 1024 / 1024
 
 	simultaneous := atomic.AddInt64(&readLargeRunning, -1)
-	if atomic.LoadUint64(&requestCountLarge)%500 == 0 {
+	if atomic.LoadUint64(&requestCountLarge)%1000 == 0 {
 		log.Printf(
 			"[W%d] Cycle %d: range %s (%d bytes) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
 			wid,
