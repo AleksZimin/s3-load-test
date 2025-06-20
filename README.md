@@ -30,3 +30,22 @@ ansible-playbook -Ki inv.yaml -e "tls=off" minio_tls.yaml
 ```
 
 To enable or disable TLS on nginx you need to update `proxy_pass` directive from/to http/https and restart nginx. Playbook doesn't do it yet.
+
+## sysctl - enable/disable optimizations
+
+To enable sysctl optimizations for sysctl:
+
+```
+git clone repo-url
+cd minio/ansible
+ansible-playbook -Ki inv.yaml -e "tuned=true" sysctl_tuning.yaml
+```
+
+
+To revert sysctl back to default value without optimizations:
+
+```
+git clone repo-url
+cd minio/ansible
+ansible-playbook -Ki inv.yaml -e "tuned=false" sysctl_tuning.yaml
+```

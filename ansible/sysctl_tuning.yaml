@@ -1,0 +1,21 @@
+---
+- name: sysctl tuning for Minio
+  hosts: all
+  gather_facts: true
+  vars:
+    tuned: true  # change to 'false' to apply a default config without optimizations
+
+  tasks:
+    - name: Determine which sysctl file to apply
+      set_fact:
+        sysctl_file: "{{ '/etc/sysctl.d/99-zzz-minio-optimizations.conf' if tuned else '/etc/sysctl.d/99-zzz-minio-optimizations_default.conf.sysctl.deb' }}"
+
+    - name: Apply the selected sysctl configuration
+      ansible.builtin.command: "sysctl -p {{ sysctl_file }}"
+      register: sysctl_result
+      changed_when: "'= applied' in sysctl_result.stdout or sysctl_result.rc == 0"
+      failed_when: sysctl_result.rc != 0
+
+    - name: Show sysctl output
+      debug:
+        var: sysctl_result.stdout
