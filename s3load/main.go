@@ -248,13 +248,13 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 
 		if errors.As(err, &errQuotaExceed) || errors.As(err, &errMaxAttempts) {
 			errorLogger.Printf("Failed to read small %s: %v in %s. Retrying", key, err, elapsed)
+			timeSleep := 5 * time.Second
 			if attempt < 10 {
-				backoff := min(time.Duration(100*(1<<attempt))*time.Millisecond, 5*time.Second)
-				time.Sleep(backoff)
+				timeSleep = min(time.Duration(100*(1<<attempt))*time.Millisecond, 5*time.Second)
 				attempt++
-			} else {
-				time.Sleep(5 * time.Second)
 			}
+			errorLogger.Printf("Sleeping for %s before retrying small %s", timeSleep, key)
+			time.Sleep(timeSleep)
 			continue
 		} else if err == nil {
 			_ = atomic.AddUint64(&requestCountSmall, 1)
@@ -318,13 +318,13 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 		var errMaxAttempts *retry.MaxAttemptsError
 		if errors.As(err, &errQuotaExceeded) || errors.As(err, &errMaxAttempts) {
 			errorLogger.Printf("Failed to read large %s: %v in %s. Retrying", key, err, elapsed)
+			timeSleep := 5 * time.Second
 			if attempt < 10 {
-				backoff := min(time.Duration(100*(1<<attempt))*time.Millisecond, 5*time.Second)
-				time.Sleep(backoff)
+				timeSleep = min(time.Duration(100*(1<<attempt))*time.Millisecond, 5*time.Second)
 				attempt++
-			} else {
-				time.Sleep(5 * time.Second)
 			}
+			errorLogger.Printf("Sleeping for %s before retrying large %s", timeSleep, key)
+			time.Sleep(timeSleep)
 			continue
 		} else if err == nil {
 			_ = atomic.AddUint64(&requestCountLarge, 1)
