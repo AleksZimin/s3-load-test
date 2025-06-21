@@ -145,9 +145,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	retryer := retry.NewStandard(func(o *retry.StandardOptions) {
+		// o.RateLimiter = ratelimit.NewTokenRateLimit(1000)
+		o.RateLimiter = nil // Disable rate limiting
+	})
+
 	s3client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 		o.DisableLogOutputChecksumValidationSkipped = true
+		o.Retryer = retryer
 	})
 
 	scriptStartTime = time.Now()
