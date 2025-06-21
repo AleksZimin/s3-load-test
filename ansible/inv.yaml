@@ -1,0 +1,17 @@
+all:
+  hosts:
+    storage-san-test-0:
+      ansible_host: 172.17.1.67
+    storage-san-test-1:
+      ansible_host: 172.17.1.68
+    storage-san-test-2:
+      ansible_host: 172.17.1.69
+    storage-san-test-3:
+      ansible_host: 172.17.1.70
+    storage-san-test-4:
+      ansible_host: 172.17.1.71
+  vars:
+    ansible_user: tfadm
+    ansible_become: true
+    ansible_become_ask_pass: true
+
