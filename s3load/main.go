@@ -142,25 +142,16 @@ func main() {
 		config.WithHTTPClient(&http.Client{
 			Timeout: time.Second * time.Duration(*timeoutSeconds),
 		}),
-		config.WithEndpointResolverWithOptions(
-			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-				return aws.Endpoint{
-					URL:               *s3Endpoint,
-					SigningRegion:     S3_REGION,
-					HostnameImmutable: true,
-				}, nil
-			}),
-		),
 	)
 
-	cfgWithCache := cfg.Copy()
-	cfgWithCache.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-		return aws.Endpoint{
-			URL:               *s3EndpointWithCache,
-			SigningRegion:     S3_REGION,
-			HostnameImmutable: true,
-		}, nil
-	})
+	// cfgWithCache := cfg.Copy()
+	// cfgWithCache.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+	// 	return aws.Endpoint{
+	// 		URL:               *s3EndpointWithCache,
+	// 		SigningRegion:     S3_REGION,
+	// 		HostnameImmutable: true,
+	// 	}, nil
+	// })
 
 	if err != nil {
 		log.Fatalf("Failed to load AWS config: %v", err)
@@ -176,12 +167,14 @@ func main() {
 		o.UsePathStyle = true
 		o.DisableLogOutputChecksumValidationSkipped = true
 		o.Retryer = retryer
+		o.BaseEndpoint = aws.String(*s3Endpoint)
 	})
 
-	s3clientWithCache := s3.NewFromConfig(cfgWithCache, func(o *s3.Options) {
+	s3clientWithCache := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 		o.DisableLogOutputChecksumValidationSkipped = true
 		o.Retryer = retryer
+		o.BaseEndpoint = aws.String(*s3EndpointWithCache)
 	})
 
 	scriptStartTime = time.Now()
