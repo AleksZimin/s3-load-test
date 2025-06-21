@@ -146,8 +146,8 @@ func main() {
 	}
 
 	retryer := retry.NewStandard(func(o *retry.StandardOptions) {
-		// o.RateLimiter = ratelimit.NewTokenRateLimit(1000)
-		o.RateLimiter = nil // Disable rate limiting
+		o.RateLimiter = ratelimit.NewTokenRateLimit(1000)
+		// o.RateLimiter = nil // Disable rate limiting
 	})
 
 	s3client := s3.NewFromConfig(cfg, func(o *s3.Options) {
