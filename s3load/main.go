@@ -29,11 +29,12 @@ import (
 )
 
 var (
-	readSmallRunning int64 = 0
-	readLargeRunning int64 = 0
-	errorLogger      *log.Logger
-	scenarioLogger   *log.Logger
-	S3_ENDPOINT      string = "http://10.210.0.67:19000"
+	readSmallRunning       int64 = 0
+	readLargeRunning       int64 = 0
+	errorLogger            *log.Logger
+	scenarioLogger         *log.Logger
+	S3_ENDPOINT            string = "https://10.210.0.67:19443"
+	S3_ENDPOINT_WITH_CACHE string = "https://10.210.0.67:19444"
 
 	scriptStartTime time.Time
 	totalBytesRead  uint64 = 0
@@ -61,6 +62,7 @@ func main() {
 
 	mode := flag.String("mode", MODE_AI, fmt.Sprintf("Select mode (%s)", MODES))
 	s3Endpoint := flag.String("endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
+	s3EndpointWithCache := flag.String("cache-endpoint-url", S3_ENDPOINT_WITH_CACHE, "S3 endpoint URL with cache")
 	workers := flag.Int("workers", 10, "Number of parallel workers")
 	smallStart := flag.Int("small-start", 0, "Start of small file range")
 	smallEnd := flag.Int("small-end", 0, "End of small file range")
@@ -139,11 +141,6 @@ func main() {
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(S3_ACCESS_KEY, S3_SECRET_KEY, "")),
 		config.WithHTTPClient(&http.Client{
 			Timeout: time.Second * time.Duration(*timeoutSeconds),
-			// Transport: &http.Transport{
-			// 	TLSNextProto: map[string]func(authority string, c *tls.Conn) http.RoundTripper{
-			// 		"h2": nil,
-			// 	},
-			// },
 		}),
 		config.WithEndpointResolverWithOptions(
 			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
@@ -155,6 +152,15 @@ func main() {
 			}),
 		),
 	)
+
+	cfgWithCache := cfg.Copy()
+	cfgWithCache.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		return aws.Endpoint{
+			URL:               *s3EndpointWithCache,
+			SigningRegion:     S3_REGION,
+			HostnameImmutable: true,
+		}, nil
+	})
 
 	if err != nil {
 		log.Fatalf("Failed to load AWS config: %v", err)
@@ -172,6 +178,12 @@ func main() {
 		o.Retryer = retryer
 	})
 
+	s3clientWithCache := s3.NewFromConfig(cfgWithCache, func(o *s3.Options) {
+		o.UsePathStyle = true
+		o.DisableLogOutputChecksumValidationSkipped = true
+		o.Retryer = retryer
+	})
+
 	scriptStartTime = time.Now()
 
 	switch *mode {
@@ -183,6 +195,8 @@ func main() {
 		runScenario(ctx, "ai-workers-20-range1", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 1, 5*time.Minute)
 		time.Sleep(10 * time.Minute)
 		runScenario(ctx, "ai-workers-20-range10", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, 5*time.Minute)
+		time.Sleep(10 * time.Minute)
+		runScenario(ctx, "ai-workers-20-range10-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, 5*time.Minute)
 	default:
 		runLoadTest(ctx, s3client, *mode, *workers, *cycles, *smallStart, *smallEnd, *smallCount, *rangeSizeMb)
 	}
@@ -420,7 +434,13 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 }
 
 func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int, duration time.Duration) {
-	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB", name, mode, workers, rangeSizeMb)
+	endpointParameterss := s3.EndpointParameters{}
+	s3URL, err := client.Options().EndpointResolverV2.ResolveEndpoint(parentCtx, endpointParameterss)
+	if err != nil {
+		errorLogger.Printf("Failed to resolve S3 endpoint: %v", err)
+		return
+	}
+	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, url=%s", name, mode, workers, rangeSizeMb, &s3URL.URI)
 	startTime := time.Now()
 	startSmall := atomic.LoadUint64(&requestCountSmall)
 	startLarge := atomic.LoadUint64(&requestCountLarge)
