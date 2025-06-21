@@ -235,6 +235,7 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 	start := time.Now()
 	var out *s3.GetObjectOutput
 	var err error
+	attempt := 0
 	for {
 		out, err = client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(S3_BUCKET),
@@ -247,6 +248,13 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 
 		if errors.As(err, &errQuotaExceed) || errors.As(err, &errMaxAttempts) {
 			errorLogger.Printf("Failed to read small %s: %v in %s. Retrying", key, err, elapsed)
+			if attempt < 10 {
+				backoff := min(time.Duration(100*(1<<attempt))*time.Millisecond, 5*time.Second)
+				time.Sleep(backoff)
+				attempt++
+			} else {
+				time.Sleep(5 * time.Second)
+			}
 			continue
 		} else if err == nil {
 			_ = atomic.AddUint64(&requestCountSmall, 1)
@@ -297,6 +305,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	var out *s3.GetObjectOutput
 	var err error
 	start := time.Now()
+	attempt := 0
 	for {
 		out, err = client.GetObject(ctx, &s3.GetObjectInput{
 			Bucket: aws.String(S3_BUCKET),
@@ -309,6 +318,13 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 		var errMaxAttempts *retry.MaxAttemptsError
 		if errors.As(err, &errQuotaExceeded) || errors.As(err, &errMaxAttempts) {
 			errorLogger.Printf("Failed to read large %s: %v in %s. Retrying", key, err, elapsed)
+			if attempt < 10 {
+				backoff := min(time.Duration(100*(1<<attempt))*time.Millisecond, 5*time.Second)
+				time.Sleep(backoff)
+				attempt++
+			} else {
+				time.Sleep(5 * time.Second)
+			}
 			continue
 		} else if err == nil {
 			_ = atomic.AddUint64(&requestCountLarge, 1)
