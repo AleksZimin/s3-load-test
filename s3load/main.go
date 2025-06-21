@@ -127,7 +127,14 @@ func main() {
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(S3_REGION),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(S3_ACCESS_KEY, S3_SECRET_KEY, "")),
-		config.WithHTTPClient(&http.Client{Timeout: time.Second * time.Duration(*timeoutSeconds)}),
+		config.WithHTTPClient(&http.Client{
+			Timeout: time.Second * time.Duration(*timeoutSeconds),
+			// Transport: &http.Transport{
+			// 	TLSNextProto: map[string]func(authority string, c *tls.Conn) http.RoundTripper{
+			// 		"h2": nil,
+			// 	},
+			// },
+		}),
 		config.WithEndpointResolverWithOptions(
 			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 				return aws.Endpoint{
