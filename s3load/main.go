@@ -427,7 +427,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 }
 
 func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int, duration time.Duration) {
-	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, url=%s", name, mode, workers, rangeSizeMb, client.Options().BaseEndpoint)
+	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, url=%s", name, mode, workers, rangeSizeMb, *client.Options().BaseEndpoint)
 	startTime := time.Now()
 	startSmall := atomic.LoadUint64(&requestCountSmall)
 	startLarge := atomic.LoadUint64(&requestCountLarge)
