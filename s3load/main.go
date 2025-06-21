@@ -427,15 +427,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 }
 
 func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int, duration time.Duration) {
-	endpointParameterss := s3.EndpointParameters{
-		Region: aws.String(S3_REGION),
-	}
-	s3URL, err := client.Options().EndpointResolverV2.ResolveEndpoint(parentCtx, endpointParameterss)
-	if err != nil {
-		errorLogger.Printf("Failed to resolve S3 endpoint: %v", err)
-		return
-	}
-	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, url=%s", name, mode, workers, rangeSizeMb, &s3URL.URI)
+	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, url=%s", name, mode, workers, rangeSizeMb, client.Options().BaseEndpoint)
 	startTime := time.Now()
 	startSmall := atomic.LoadUint64(&requestCountSmall)
 	startLarge := atomic.LoadUint64(&requestCountLarge)
