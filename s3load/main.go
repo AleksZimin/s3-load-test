@@ -153,9 +153,7 @@ func main() {
 	}
 
 	retryer := retry.NewStandard(func(o *retry.StandardOptions) {
-		// o.RateLimiter = ratelimit.NewTokenRateLimit(1000)
 		o.RateLimiter = ratelimit.None // Disable rate limiting
-		// o.RateLimiter = nil // Disable rate limiting
 	})
 
 	s3client := s3.NewFromConfig(cfg, func(o *s3.Options) {
@@ -209,7 +207,7 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 			defer wg.Done()
 
 			smallFile = fmt.Sprintf("small/file_%08d.txt", idx)
-			// largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
+			largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
 
 			select {
 			case <-ctx.Done():
@@ -225,7 +223,7 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 			default:
 			}
 
-			// readRandomLargeFileRange(ctx, worker, cycle, client, rangeSizeMiB, largeFile)
+			readRandomLargeFileRange(ctx, worker, cycle, client, rangeSizeMiB, largeFile)
 
 		}(idx)
 	}
