@@ -32,6 +32,7 @@ var (
 	readSmallRunning int64 = 0
 	readLargeRunning int64 = 0
 	errorLogger      *log.Logger
+	scenarioLogger   *log.Logger
 	S3_ENDPOINT      string = "http://10.210.0.67:19000"
 
 	scriptStartTime time.Time
@@ -50,12 +51,13 @@ const (
 	S3_ACCESS_KEY = "minioadmin"
 	S3_SECRET_KEY = "minio-strong-secret"
 
-	MODE_AI     = "ai"
-	MODE_SIMPLE = "simple"
+	MODE_AI          = "ai"
+	MODE_SIMPLE      = "simple"
+	MODE_ALLSCENARIO = "all-scenarios"
 )
 
 func main() {
-	MODES := fmt.Sprintf("(%s|%s)", MODE_AI, MODE_SIMPLE)
+	MODES := fmt.Sprintf("(%s|%s|%s)", MODE_AI, MODE_SIMPLE, MODE_ALLSCENARIO)
 
 	mode := flag.String("mode", MODE_AI, fmt.Sprintf("Select mode (%s)", MODES))
 	s3Endpoint := flag.String("endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
@@ -89,15 +91,23 @@ func main() {
 		os.Exit(1)
 	}
 
-	logFile, err := os.OpenFile("log.log", os.O_CREATE|os.O_WRONLY, 0644)
-	//logFile, err := os.OpenFile("log.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// logFile, err := os.OpenFile("log.log", os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := os.OpenFile("log.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Printf("failed to open log file: %v\n", err)
 		os.Exit(1)
 	}
 	defer logFile.Close()
 
+	scenarioFile, err := os.OpenFile("scenario.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Printf("failed to open scenario log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer scenarioFile.Close()
+
 	errorLogger = log.New(logFile, "ERROR: ", log.LstdFlags|log.Lmicroseconds)
+	scenarioLogger = log.New(scenarioFile, "", log.LstdFlags|log.Lmicroseconds)
 
 	ctx := context.Background()
 	ctx, cancelFunc := context.WithCancel(ctx)
@@ -163,27 +173,43 @@ func main() {
 	})
 
 	scriptStartTime = time.Now()
+
+	switch *mode {
+	case MODE_ALLSCENARIO:
+		runScenario(ctx, "ai-workers-10-range1", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 1, 5*time.Minute)
+		time.Sleep(10 * time.Minute)
+		runScenario(ctx, "ai-workers-10-range10", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 10, 5*time.Minute)
+		time.Sleep(10 * time.Minute)
+		runScenario(ctx, "ai-workers-20-range1", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 1, 5*time.Minute)
+		time.Sleep(10 * time.Minute)
+		runScenario(ctx, "ai-workers-20-range10", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, 5*time.Minute)
+	default:
+		runLoadTest(ctx, s3client, *mode, *workers, *cycles, *smallStart, *smallEnd, *smallCount, *rangeSizeMb)
+	}
+}
+
+func runLoadTest(ctx context.Context, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int) {
 	var wg sync.WaitGroup
-	wg.Add(*workers)
-	for worker := range *workers {
+	wg.Add(workers)
+	for worker := 0; worker < workers; worker++ {
 		go func(worker int) {
 			defer wg.Done()
 
-			for cycle := 1; *cycles < 0 || cycle <= *cycles; cycle++ {
+			for cycle := 1; cycles < 0 || cycle <= cycles; cycle++ {
 				select {
 				case <-ctx.Done():
 					return
 				default:
 				}
 
-				switch *mode {
+				switch mode {
 				case MODE_AI:
-					runAIWorker(ctx, worker, cycle, s3client, *smallStart, *smallEnd, *smallCount, *rangeSizeMb)
+					runAIWorker(ctx, worker, cycle, client, smallStart, smallEnd, smallCount, rangeSizeMb)
 				case MODE_SIMPLE:
-					idx := rand.Intn(*smallEnd-*smallStart+1) + *smallStart
+					idx := rand.Intn(smallEnd-smallStart+1) + smallStart
 					largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
 
-					readRandomLargeFileRange(ctx, worker, cycle, s3client, *rangeSizeMb, largeFile)
+					readRandomLargeFileRange(ctx, worker, cycle, client, rangeSizeMb, largeFile)
 				}
 			}
 		}(worker)
@@ -391,4 +417,25 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 			atomic.LoadUint64(&requestCountLarge),
 		)
 	}
+}
+
+func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int, duration time.Duration) {
+	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB", name, mode, workers, rangeSizeMb)
+	startTime := time.Now()
+	startSmall := atomic.LoadUint64(&requestCountSmall)
+	startLarge := atomic.LoadUint64(&requestCountLarge)
+	startBytes := atomic.LoadUint64(&totalBytesRead)
+
+	scriptStartTime = startTime
+	ctx, cancel := context.WithTimeout(parentCtx, duration)
+	runLoadTest(ctx, client, mode, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb)
+	cancel()
+
+	elapsed := time.Since(startTime)
+	smallDone := atomic.LoadUint64(&requestCountSmall) - startSmall
+	largeDone := atomic.LoadUint64(&requestCountLarge) - startLarge
+	bytesDone := atomic.LoadUint64(&totalBytesRead) - startBytes
+	speed := float64(bytesDone) / elapsed.Seconds() / 1024 / 1024
+
+	scenarioLogger.Printf("Finish %s: duration=%s small=%d large=%d bytes=%d avgSpeed=%.2f MB/s", name, elapsed, smallDone, largeDone, bytesDone, speed)
 }
