@@ -147,6 +147,7 @@ func main() {
 
 	retryer := retry.NewStandard(func(o *retry.StandardOptions) {
 		o.RateLimiter = ratelimit.NewTokenRateLimit(1000)
+		o.RateLimiter.AddTokens(10000000000000)
 		// o.RateLimiter = nil // Disable rate limiting
 	})
 
