@@ -188,14 +188,14 @@ func main() {
 
 	switch *mode {
 	case MODE_ALLSCENARIO:
-		runScenario(ctx, "ai-workers-10-range1", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 1, 5*time.Minute)
-		time.Sleep(10 * time.Minute)
-		runScenario(ctx, "ai-workers-10-range10", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 10, 5*time.Minute)
-		time.Sleep(10 * time.Minute)
-		runScenario(ctx, "ai-workers-20-range1", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 1, 5*time.Minute)
-		time.Sleep(10 * time.Minute)
-		runScenario(ctx, "ai-workers-20-range10", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, 5*time.Minute)
-		time.Sleep(10 * time.Minute)
+		runScenario(ctx, "ai-workers-10-range1", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 1, 2*time.Minute)
+		time.Sleep(4 * time.Minute)
+		runScenario(ctx, "ai-workers-10-range10", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 10, 2*time.Minute)
+		time.Sleep(4 * time.Minute)
+		runScenario(ctx, "ai-workers-20-range1", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 1, 2*time.Minute)
+		time.Sleep(4 * time.Minute)
+		runScenario(ctx, "ai-workers-20-range10", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, 2*time.Minute)
+		time.Sleep(4 * time.Minute)
 		runScenario(ctx, "ai-workers-20-range10-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, 5*time.Minute)
 	default:
 		runLoadTest(ctx, s3client, *mode, *workers, *cycles, *smallStart, *smallEnd, *smallCount, *rangeSizeMb)
