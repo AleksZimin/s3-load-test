@@ -195,7 +195,7 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 			defer wg.Done()
 
 			smallFile = fmt.Sprintf("small/file_%08d.txt", idx)
-			largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
+			// largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
 
 			select {
 			case <-ctx.Done():
@@ -211,7 +211,7 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 			default:
 			}
 
-			readRandomLargeFileRange(ctx, worker, cycle, client, rangeSizeMiB, largeFile)
+			// readRandomLargeFileRange(ctx, worker, cycle, client, rangeSizeMiB, largeFile)
 
 		}(idx)
 	}
