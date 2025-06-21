@@ -434,7 +434,9 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 }
 
 func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int, duration time.Duration) {
-	endpointParameterss := s3.EndpointParameters{}
+	endpointParameterss := s3.EndpointParameters{
+		Region: aws.String(S3_REGION),
+	}
 	s3URL, err := client.Options().EndpointResolverV2.ResolveEndpoint(parentCtx, endpointParameterss)
 	if err != nil {
 		errorLogger.Printf("Failed to resolve S3 endpoint: %v", err)
