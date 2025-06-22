@@ -33,6 +33,7 @@ var (
 	readLargeRunning       int64 = 0
 	errorLogger            *log.Logger
 	scenarioLogger         *log.Logger
+	csvLogger              *log.Logger
 	S3_ENDPOINT            string = "https://10.210.0.67:19443"
 	S3_ENDPOINT_WITH_CACHE string = "https://10.210.0.67:19444"
 
@@ -66,7 +67,7 @@ func main() {
 	workers := flag.Int("workers", 10, "Number of parallel workers")
 	smallStart := flag.Int("small-start", 0, "Start of small file range")
 	smallEnd := flag.Int("small-end", 0, "End of small file range")
-	smallCount := flag.Int("small-count", 1000, "Number of small files to read simultaneously")
+	threadsAmount := flag.Int("small-count", 1000, "Number threads to read simultaneously")
 	cycles := flag.Int("cycles", -1, "Number of cycles per worker")
 	rangeSizeMb := flag.Int("range-size-mb", 10, "Large file download range size")
 	timeoutSeconds := flag.Int("connection-timeout", 0, "Connection timeout in seconds")
@@ -93,23 +94,41 @@ func main() {
 		os.Exit(1)
 	}
 
-	// logFile, err := os.OpenFile("log.log", os.O_CREATE|os.O_WRONLY, 0644)
-	logFile, err := os.OpenFile("log.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	hostname, err := os.Hostname()
+	if err != nil {
+		fmt.Printf("failed to get hostname: %v\n", err)
+		os.Exit(1)
+	}
+	fileNameSuffix := fmt.Sprintf("%s-%s.log", hostname, time.Now().Format("2006-01-02_15-04"))
+
+	logFile, err := os.OpenFile(fmt.Sprintf("log-%s.log", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Printf("failed to open log file: %v\n", err)
 		os.Exit(1)
 	}
 	defer logFile.Close()
 
-	scenarioFile, err := os.OpenFile("scenario.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	scenarioFile, err := os.OpenFile(fmt.Sprintf("scenario-%s.log", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Printf("failed to open scenario log file: %v\n", err)
 		os.Exit(1)
 	}
 	defer scenarioFile.Close()
 
+	csvFile, err := os.OpenFile(fmt.Sprintf("csv-%s.csv", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		fmt.Printf("failed to open CSV log file: %v\n", err)
+		os.Exit(1)
+	}
+	defer csvFile.Close()
+
 	errorLogger = log.New(logFile, "ERROR: ", log.LstdFlags|log.Lmicroseconds)
 	scenarioLogger = log.New(scenarioFile, "", log.LstdFlags|log.Lmicroseconds)
+	// logger to generate CSV output without timestamps
+	csvLogger = log.New(csvFile, "", 0)
+
+	// Create header for CSV file
+	csvLogger.Println("Scenario,Load type,Workers count,Range size for 100MB files (MB),Threads per worker,Start range for 1KB files,End range for 1KB files,Number of small files in range,Test duration (minutes),URL,Processed small files,Errors while processing small files,Processed large files,Errors while processing large files,Downloaded data (MB),Average download speed (MB/s)")
 
 	ctx := context.Background()
 	ctx, cancelFunc := context.WithCancel(ctx)
@@ -176,48 +195,48 @@ func main() {
 		timeToLoad := 30 * time.Minute
 		timeSleep := 15 * time.Minute
 
-		runScenario(ctx, "ai-workers-10-range1", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 1, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range1", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-20-range1", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 1, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range1-with-cache", s3clientWithCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-10-range10", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 10, timeToLoad)
+		runScenario(ctx, "ai-workers-20-range1", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-20-range10", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, timeToLoad)
+		runScenario(ctx, "ai-workers-20-range1-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-10-range1-with-cache", s3clientWithCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 1, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range10", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-20-range1-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 1, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range10-with-cache", s3clientWithCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-10-range10-with-cache", s3clientWithCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 10, timeToLoad)
+		runScenario(ctx, "ai-workers-20-range10", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-20-range10-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, timeToLoad)
+		runScenario(ctx, "ai-workers-20-range10-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 	default:
-		runLoadTest(ctx, s3client, *mode, *workers, *cycles, *smallStart, *smallEnd, *smallCount, *rangeSizeMb)
+		runLoadTest(ctx, s3client, *mode, *workers, *cycles, *smallStart, *smallEnd, *threadsAmount, *rangeSizeMb)
 	}
 }
 
-func runLoadTest(ctx context.Context, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int) {
+func runLoadTest(ctx context.Context, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, threadsAmount, rangeSizeMb int) {
 	var wg sync.WaitGroup
 	wg.Add(workers)
 	for worker := 0; worker < workers; worker++ {
@@ -233,7 +252,7 @@ func runLoadTest(ctx context.Context, client *s3.Client, mode string, workers, c
 
 				switch mode {
 				case MODE_AI:
-					runAIWorker(ctx, worker, cycle, client, smallStart, smallEnd, smallCount, rangeSizeMb)
+					runAIWorker(ctx, worker, cycle, client, smallStart, smallEnd, threadsAmount, rangeSizeMb)
 				case MODE_SIMPLE:
 					idx := rand.Intn(smallEnd-smallStart+1) + smallStart
 					largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
@@ -246,16 +265,16 @@ func runLoadTest(ctx context.Context, client *s3.Client, mode string, workers, c
 	wg.Wait()
 }
 
-func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smallStart, smallEnd, smallCount, rangeSizeMiB int) {
+func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smallStart, smallEnd, threadsAmount, rangeSizeMiB int) {
 	var wg sync.WaitGroup
 	// Read 1 random small file
 	smallIdx := rand.Intn(smallEnd-smallStart+1) + smallStart
 	smallFile := fmt.Sprintf("small/file_%08d.txt", smallIdx)
 	readSmallFile(ctx, client, worker, cycle, smallFile)
 
-	// Read smallCount random small files in parallel
-	wg.Add(smallCount)
-	for _ = range smallCount {
+	// Read threadsAmount random small files in parallel
+	wg.Add(threadsAmount)
+	for _ = range threadsAmount {
 		idx := rand.Intn(smallEnd-smallStart+1) + smallStart
 
 		go func(idx int) {
@@ -448,8 +467,8 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	}
 }
 
-func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int, duration time.Duration) {
-	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, smallStart=%d smallEnd=%d smallCount=%d url=%s", name, mode, workers, rangeSizeMb, smallStart, smallEnd, smallCount, *client.Options().BaseEndpoint)
+func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, threadsAmount, rangeSizeMb int, duration time.Duration) {
+	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, smallStart=%d smallEnd=%d threadsAmount=%d url=%s", name, mode, workers, rangeSizeMb, smallStart, smallEnd, threadsAmount, *client.Options().BaseEndpoint)
 	startTime := time.Now()
 	startSmall := atomic.LoadUint64(&requestCountSmall)
 	startLarge := atomic.LoadUint64(&requestCountLarge)
@@ -457,7 +476,7 @@ func runScenario(parentCtx context.Context, name string, client *s3.Client, mode
 
 	scriptStartTime = startTime
 	ctx, cancel := context.WithTimeout(parentCtx, duration)
-	runLoadTest(ctx, client, mode, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb)
+	runLoadTest(ctx, client, mode, workers, cycles, smallStart, smallEnd, threadsAmount, rangeSizeMb)
 	cancel()
 
 	elapsed := time.Since(startTime)
@@ -469,6 +488,24 @@ func runScenario(parentCtx context.Context, name string, client *s3.Client, mode
 	speed := float64(bytesDone) / elapsed.Seconds() / 1024 / 1024
 
 	scenarioLogger.Printf("Finish %s: duration=%s; small count total=%d; small count failed=%d; large count total=%d; large count failed=%d; megabytes=%d; avgSpeed=%.2f MB/s", name, elapsed, smallDone, failureCountSmall, largeDone, failureCountLarge, bytesDone/1024/1024, speed)
+	csvLogger.Printf("%s,%s,%d,%d,%d,%d,%d,%d,%.2f,%s,%d,%d,%d,%d,%.2f,%.2f",
+		name,
+		mode,
+		workers,
+		rangeSizeMb,
+		threadsAmount,
+		smallStart,
+		smallEnd,
+		smallEnd-smallStart+1,
+		elapsed.Minutes(),
+		*client.Options().BaseEndpoint,
+		smallDone,
+		failureCountSmall,
+		largeDone,
+		failureCountLarge,
+		float64(bytesDone)/1024/1024,
+		speed,
+	)
 }
 
 func waitWithContext(ctx context.Context, d time.Duration) {
