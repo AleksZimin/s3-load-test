@@ -144,15 +144,6 @@ func main() {
 		}),
 	)
 
-	// cfgWithCache := cfg.Copy()
-	// cfgWithCache.EndpointResolverWithOptions = aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-	// 	return aws.Endpoint{
-	// 		URL:               *s3EndpointWithCache,
-	// 		SigningRegion:     S3_REGION,
-	// 		HostnameImmutable: true,
-	// 	}, nil
-	// })
-
 	if err != nil {
 		log.Fatalf("Failed to load AWS config: %v", err)
 		errorLogger.Printf("Failed to load AWS config: %v", err)
@@ -182,13 +173,25 @@ func main() {
 	switch *mode {
 	case MODE_ALLSCENARIO:
 		runScenario(ctx, "ai-workers-10-range1", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 1, 2*time.Minute)
-		time.Sleep(4 * time.Minute)
+		if ctx.Err() == nil {
+			waitWithContext(ctx, 10*time.Minute)
+		}
+
 		runScenario(ctx, "ai-workers-10-range10", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *smallCount, 10, 2*time.Minute)
-		time.Sleep(4 * time.Minute)
+		if ctx.Err() == nil {
+			waitWithContext(ctx, 10*time.Minute)
+		}
+
 		runScenario(ctx, "ai-workers-20-range1", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 1, 2*time.Minute)
-		time.Sleep(4 * time.Minute)
+		if ctx.Err() == nil {
+			waitWithContext(ctx, 10*time.Minute)
+		}
+
 		runScenario(ctx, "ai-workers-20-range10", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, 2*time.Minute)
-		time.Sleep(4 * time.Minute)
+		if ctx.Err() == nil {
+			waitWithContext(ctx, 10*time.Minute)
+		}
+
 		runScenario(ctx, "ai-workers-20-range10-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *smallCount, 10, 5*time.Minute)
 	default:
 		runLoadTest(ctx, s3client, *mode, *workers, *cycles, *smallStart, *smallEnd, *smallCount, *rangeSizeMb)
@@ -445,4 +448,13 @@ func runScenario(parentCtx context.Context, name string, client *s3.Client, mode
 	speed := float64(bytesDone) / elapsed.Seconds() / 1024 / 1024
 
 	scenarioLogger.Printf("Finish %s: duration=%s small=%d large=%d bytes=%d avgSpeed=%.2f MB/s", name, elapsed, smallDone, largeDone, bytesDone, speed)
+}
+
+func waitWithContext(ctx context.Context, d time.Duration) {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
