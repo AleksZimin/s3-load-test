@@ -464,8 +464,8 @@ func runScenario(parentCtx context.Context, name string, client *s3.Client, mode
 	smallDone := atomic.LoadUint64(&requestCountSmall) - startSmall
 	largeDone := atomic.LoadUint64(&requestCountLarge) - startLarge
 	bytesDone := atomic.LoadUint64(&totalBytesRead) - startBytes
-	failureCountSmall := atomic.AddUint64(&failureCountSmall, 1)
-	failureCountLarge := atomic.AddUint64(&failureCountLarge, 1)
+	failureCountSmall := atomic.LoadUint64(&failureCountSmall)
+	failureCountLarge := atomic.LoadUint64(&failureCountLarge)
 	speed := float64(bytesDone) / elapsed.Seconds() / 1024 / 1024
 
 	scenarioLogger.Printf("Finish %s: duration=%s; small count total=%d; small count failed=%d; large count total=%d; large count failed=%d; megabytes=%d; avgSpeed=%.2f MB/s", name, elapsed, smallDone, failureCountSmall, largeDone, failureCountLarge, bytesDone/1024/1024, speed)
