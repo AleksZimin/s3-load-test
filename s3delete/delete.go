@@ -2,14 +2,11 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -27,39 +24,16 @@ const (
 	secretAccessKey    = "minio-strong-secret"
 	useSSL             = true
 	bucketName         = "test-bucket"
-	prefix             = "large/"
 	workers            = 100
 	printProgressEvery = 512 // How often to update the percentage output
 )
 
-func parseSize(sizeStr string) (int64, error) {
-	sizeStr = strings.TrimSpace(sizeStr)
-	multiplier := int64(1)
-	unit := sizeStr[len(sizeStr)-1]
-	switch unit {
-	case 'K', 'k':
-		multiplier = 1024
-		sizeStr = sizeStr[:len(sizeStr)-1]
-	case 'M', 'm':
-		multiplier = 1024 * 1024
-		sizeStr = sizeStr[:len(sizeStr)-1]
-	case 'G', 'g':
-		multiplier = 1024 * 1024 * 1024
-		sizeStr = sizeStr[:len(sizeStr)-1]
-	}
-	val, err := strconv.ParseInt(sizeStr, 10, 64)
-	if err != nil {
-		return 0, err
-	}
-	return val * multiplier, nil
-}
-
-func uploadWorker(
+func deleteWorker(
 	ctx context.Context,
 	minioClient *minio.Client,
-	jobs <-chan int,
-	contentLength int64,
 	log *zap.Logger,
+	prefix string,
+	jobs <-chan int,
 	counter *int64,
 	total int64,
 	startTime time.Time,
@@ -85,33 +59,33 @@ func uploadWorker(
 			// Check if file exists
 			if !force {
 				_, err := minioClient.StatObject(ctx, bucketName, objectName, minio.StatObjectOptions{})
-				if err == nil {
-					log.Warn("already exists. Skipping")
+				// skip if file does not exist
+				if err != nil {
+					if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+						log.Debug("file does not exist, skipping", zap.Error(err))
+						continue
+					}
+					log.Error("StatObject error", zap.Error(err))
 					continue
 				}
+				log.Debug("file exists, deleting", zap.Error(err))
 			}
 
-			_, err := minioClient.PutObject(
-				ctx,
-				bucketName,
-				objectName,
-				io.LimitReader(rand.Reader, contentLength),
-				contentLength,
-				minio.PutObjectOptions{},
-			)
+			err := minioClient.RemoveObject(ctx, bucketName, objectName, minio.RemoveObjectOptions{})
 			if err != nil {
-				log.Error("upload error", zap.Error(err))
+				log.Error("RemoveObject error", zap.Error(err))
+				continue
 			} else {
-				// Update and print progress
+				log.Debug("file deleted successfully")
 				done := atomic.AddInt64(counter, 1)
 				elapsed := time.Since(startTime).Seconds()
 				percent := float64(done) / float64(total) * 100
 				log.Debug(
-					"uploaded",
-					zap.Int64("contentLength", contentLength),
-					zap.Float64("percent", percent),
+					"deleted",
 					zap.Int64("done", done),
 					zap.Int64("total", total),
+					zap.Float64("percent", percent),
+					zap.Float64("elapsed", elapsed),
 				)
 				if done%printProgressEvery == 0 || done == int64(total) {
 					rate := float64(done) / elapsed
@@ -162,13 +136,13 @@ func createLogger(logFilePath string) (*zap.Logger, error) {
 }
 
 func main() {
-	if len(os.Args) < 4 {
+	if len(os.Args) < 5 {
 		fmt.Println(`Usage: <program> <start> <end> <size> [--force]
 Example: 0 10000 1K
-- <start>: Starting index of files to upload
-- <end>: Ending index of files to upload
-- <size>: Size of each file (e.g., 1K, 10M, 1G)
-- [--force]: Optional flag to overwrite existing files`)
+- <prefix>: Prefix for the files to delete. Can be "large/" or "small/".
+- <start>: Starting index of files to delete
+- <end>: Ending index of files to delete
+- [--force]: Optional flag to not check if files exist before deleting. `)
 		os.Exit(1)
 	}
 
@@ -178,25 +152,25 @@ Example: 0 10000 1K
 		os.Exit(1)
 	}
 
-	start, err := strconv.Atoi(os.Args[1])
+	prefix := os.Args[1]
+	if prefix != "large/" && prefix != "small/" {
+		log.Fatal("Invalid prefix. Only 'large/' or 'small/' supported", zap.String("prefix", prefix))
+	}
+
+	start, err := strconv.Atoi(os.Args[2])
 	if err != nil || start < 0 {
 		log.Fatal("Invalid start index", zap.Error(err))
 	}
 
-	end, err := strconv.Atoi(os.Args[2])
-	if err != nil || end > 50000000 || end <= start {
+	end, err := strconv.Atoi(os.Args[3])
+	if err != nil || end > 150000000 || end <= start {
 		log.Fatal("Invalid end index", zap.Error(err), zap.Int("start", start), zap.Int("end", end))
-	}
-
-	sizeBytes, err := parseSize(os.Args[3])
-	if err != nil || sizeBytes <= 0 {
-		log.Fatal("Invalid size", zap.Error(err), zap.Int64("size", sizeBytes))
 	}
 
 	var force bool
 	overwriteFlag := os.Args[4]
 	if overwriteFlag != "--force" && overwriteFlag != "" {
-		log.Fatal("Invalid key. Only --force supported for third argument", zap.String("have", overwriteFlag))
+		log.Fatal("Invalid key. Only --force supported for fourth argument", zap.String("have", overwriteFlag))
 	} else {
 		force = true
 	}
@@ -247,7 +221,7 @@ Example: 0 10000 1K
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			uploadWorker(ctx, minioClient, jobs, sizeBytes, log.With(zap.Int("worker", worker)), &counter, total, startTime, force)
+			deleteWorker(ctx, minioClient, log.With(zap.Int("worker", worker)), prefix, jobs, &counter, total, startTime, force)
 		}()
 	}
 
@@ -262,5 +236,5 @@ Example: 0 10000 1K
 	close(jobs)
 
 	wg.Wait()
-	log.Info("Upload completed")
+	log.Info("delete completed")
 }
