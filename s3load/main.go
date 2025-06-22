@@ -449,7 +449,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 }
 
 func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, smallCount, rangeSizeMb int, duration time.Duration) {
-	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, url=%s", name, mode, workers, rangeSizeMb, *client.Options().BaseEndpoint)
+	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, smallStart=%d smallEnd=%d smallCount=%d url=%s", name, mode, workers, rangeSizeMb, smallStart, smallEnd, smallCount, *client.Options().BaseEndpoint)
 	startTime := time.Now()
 	startSmall := atomic.LoadUint64(&requestCountSmall)
 	startLarge := atomic.LoadUint64(&requestCountLarge)
@@ -464,9 +464,11 @@ func runScenario(parentCtx context.Context, name string, client *s3.Client, mode
 	smallDone := atomic.LoadUint64(&requestCountSmall) - startSmall
 	largeDone := atomic.LoadUint64(&requestCountLarge) - startLarge
 	bytesDone := atomic.LoadUint64(&totalBytesRead) - startBytes
+	failureCountSmall := atomic.AddUint64(&failureCountSmall, 1)
+	failureCountLarge := atomic.AddUint64(&failureCountLarge, 1)
 	speed := float64(bytesDone) / elapsed.Seconds() / 1024 / 1024
 
-	scenarioLogger.Printf("Finish %s: duration=%s small=%d large=%d bytes=%d avgSpeed=%.2f MB/s", name, elapsed, smallDone, largeDone, bytesDone, speed)
+	scenarioLogger.Printf("Finish %s: duration=%s; small count total=%d; small count failed=%d; large count total=%d; large count failed=%d; megabytes=%d; avgSpeed=%.2f MB/s", name, elapsed, smallDone, failureCountSmall, largeDone, failureCountLarge, bytesDone/1024/1024, speed)
 }
 
 func waitWithContext(ctx context.Context, d time.Duration) {
