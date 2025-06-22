@@ -99,7 +99,7 @@ func main() {
 		fmt.Printf("failed to get hostname: %v\n", err)
 		os.Exit(1)
 	}
-	fileNameSuffix := fmt.Sprintf("%s-%s.log", hostname, time.Now().Format("2006-01-02_15-04"))
+	fileNameSuffix := fmt.Sprintf("%s-%s", hostname, time.Now().Format("2006-01-02_15-04"))
 
 	logFile, err := os.OpenFile(fmt.Sprintf("log-%s.log", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
@@ -126,9 +126,6 @@ func main() {
 	scenarioLogger = log.New(scenarioFile, "", log.LstdFlags|log.Lmicroseconds)
 	// logger to generate CSV output without timestamps
 	csvLogger = log.New(csvFile, "", 0)
-
-	// Create header for CSV file
-	csvLogger.Println("Scenario,Load type,Workers count,Range size for 100MB files (MB),Threads per worker,Start range for 1KB files,End range for 1KB files,Number of small files in range,Test duration (minutes),URL,Processed small files,Errors while processing small files,Processed large files,Errors while processing large files,Downloaded data (MB),Average download speed (MB/s)")
 
 	ctx := context.Background()
 	ctx, cancelFunc := context.WithCancel(ctx)
@@ -191,6 +188,8 @@ func main() {
 
 	switch *mode {
 	case MODE_ALLSCENARIO:
+		// Create header for CSV file
+		csvLogger.Println("Scenario,Load type,Workers count,Range size for 100MB files (MB),Threads per worker,Start range for 1KB files,End range for 1KB files,Number of small files in range,Test duration (minutes),URL,Processed small files,Errors while processing small files,Processed large files,Errors while processing large files,Downloaded data (MB),Average download speed (MB/s)")
 
 		timeToLoad := 30 * time.Minute
 		timeSleep := 15 * time.Minute
