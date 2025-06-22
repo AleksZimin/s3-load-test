@@ -199,12 +199,19 @@ Example: 0 10000 1K
 		log.Fatal("Invalid size", zap.Error(err), zap.Int64("size", sizeBytes))
 	}
 
-	var force bool
-	overwriteFlag := os.Args[5]
-	if overwriteFlag != "--force" && overwriteFlag != "" {
-		log.Fatal("Invalid key. Only --force supported for fifth argument", zap.String("have", overwriteFlag))
-	} else {
-		force = true
+	force := false
+	if len(os.Args) < 6 {
+		log.Info("No force flag provided, will check if files exist before uploading")
+	} else if len(os.Args) > 6 {
+		log.Fatal("Too many arguments. Expected 5 or 6 arguments, got", zap.Int("count", len(os.Args)))
+	}
+	if len(os.Args) == 6 && os.Args[5] == "" {
+		log.Info("No force flag provided, will check if files exist before uploading")
+	} else if len(os.Args) == 6 && os.Args[5] != "--force" {
+		log.Fatal("Invalid key. Only --force supported for fifth argument", zap.String("have", os.Args[5]))
+	}
+	if len(os.Args) == 6 && os.Args[5] == "--force" {
+		log.Info("Force flag provided, will overwrite existing files")
 	}
 
 	minioClient, err := minio.New(endpoint, &minio.Options{

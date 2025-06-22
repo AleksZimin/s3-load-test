@@ -137,7 +137,7 @@ func createLogger(logFilePath string) (*zap.Logger, error) {
 
 func main() {
 	if len(os.Args) < 5 {
-		fmt.Println(`Usage: <program> <start> <end> <size> [--force]
+		fmt.Println(`Usage: <program> <prefix/> <start> <end> [--force]
 Example: 0 10000 1K
 - <prefix>: Prefix for the files to delete. Can be "large/" or "small/".
 - <start>: Starting index of files to delete
@@ -167,11 +167,18 @@ Example: 0 10000 1K
 		log.Fatal("Invalid end index", zap.Error(err), zap.Int("start", start), zap.Int("end", end))
 	}
 
-	var force bool
-	overwriteFlag := os.Args[4]
-	if overwriteFlag != "--force" && overwriteFlag != "" {
-		log.Fatal("Invalid key. Only --force supported for fourth argument", zap.String("have", overwriteFlag))
-	} else {
+	force := false
+	if len(os.Args) < 5 {
+		log.Info("No force flag provided, will check if files exist before deleting")
+	} else if len(os.Args) > 5 {
+		log.Fatal("Too many arguments. Expected 4 or 5 arguments, got", zap.Int("count", len(os.Args)))
+	}
+	if len(os.Args) == 5 && os.Args[4] == "" {
+		log.Info("No force flag provided, will check if files exist before deleting")
+	} else if len(os.Args) == 5 && os.Args[4] != "--force" {
+		log.Fatal("Invalid key. Only --force supported for fourth argument", zap.String("have", os.Args[4]))
+	}
+	if len(os.Args) == 5 && os.Args[4] == "--force" {
 		force = true
 	}
 
