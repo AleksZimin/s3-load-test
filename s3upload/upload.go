@@ -28,9 +28,7 @@ import (
 )
 
 const (
-	S3_ENDPOINT = "http://10.200.0.72:18080"
-	// accessKeyID        = "XRX3Q4ZK8ANGDV4L3W21"
-	// secretAccessKey    = "WcDJBkQs7BLGLaQDPzjEXEIXoFuM5K0R1dnu5Kbk"
+	S3_ENDPOINT        = "http://10.200.0.72:18080"
 	useSSL             = false
 	bucketName         = "test-bucket"
 	workers            = 500
@@ -41,6 +39,7 @@ const (
 	S3_SECRET_KEY      = "WcDJBkQs7BLGLaQDPzjEXEIXoFuM5K0R1dnu5Kbk"
 )
 
+// Main
 func main() {
 	s3Endpoint := flag.String("endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
 	timeoutSeconds := flag.Int("connection-timeout", 60, "Connection timeout in seconds")
@@ -72,20 +71,6 @@ func main() {
 		<-signalChan
 		cancel()
 	}()
-
-	// cfg, err := config.LoadDefaultConfig(ctx,
-	// 	config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
-	// 	config.WithRegion("us-east-1"),
-	// 	config.WithEndpointResolverWithOptions(
-	// 		aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-	// 			return aws.Endpoint{
-	// 				URL:               endpoint,
-	// 				SigningRegion:     "us-east-1",
-	// 				HostnameImmutable: true,
-	// 			}, nil
-	// 		}),
-	// 	),
-	// )
 
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(S3_REGION),
