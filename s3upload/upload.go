@@ -15,8 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/minio/minio-go/v7"
-	"github.com/minio/minio-go/v7/pkg/credentials"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -28,7 +30,7 @@ const (
 	useSSL             = true
 	bucketName         = "test-bucket"
 	workers            = 500
-	printProgressEvery = 512 // How often to update the percentage output
+	printProgressEvery = 512
 )
 
 func parseSize(sizeStr string) (int64, error) {
@@ -55,7 +57,7 @@ func parseSize(sizeStr string) (int64, error) {
 
 func uploadWorker(
 	ctx context.Context,
-	minioClient *minio.Client,
+	s3Client *s3.Client,
 	log *zap.Logger,
 	prefix string,
 	jobs <-chan int,
@@ -79,220 +81,163 @@ func uploadWorker(
 				return
 			}
 			objectName := fmt.Sprintf("%sfile_%08d.txt", prefix, job)
-			log := log.With(
-				zap.String("name", objectName),
-				zap.Int("job", job),
-				zap.String("bucket", bucketName),
-			)
+			log := log.With(zap.String("name", objectName), zap.Int("job", job))
 
 			needUpload := true
-			// Check if file exists
 			if !force {
-				_, err := minioClient.StatObject(ctx, bucketName, objectName, minio.StatObjectOptions{})
+				_, err := s3Client.HeadObject(ctx, &s3.HeadObjectInput{
+					Bucket: aws.String(bucketName),
+					Key:    aws.String(objectName),
+				})
 				if err == nil {
+					atomic.AddInt64(skippedCounter, 1)
 					needUpload = false
-					_ = atomic.AddInt64(skippedCounter, 1)
-					// done := atomic.LoadInt64(uploadcounter)
-					// if skippedCounter%printProgressEvery == 0 {
-					// 	log.Sugar().Infof("[SKIPPED] %s already exists, skipping upload. Total skipped: %d\n", objectName, skippedCounter)
-					// }
-					// continue
 				}
 			}
 
 			if needUpload {
-				_, err := minioClient.PutObject(
-					ctx,
-					bucketName,
-					objectName,
-					io.LimitReader(rand.Reader, contentLength),
-					contentLength,
-					minio.PutObjectOptions{},
-				)
+				_, err := s3Client.PutObject(ctx, &s3.PutObjectInput{
+					Bucket:        aws.String(bucketName),
+					Key:           aws.String(objectName),
+					Body:          io.LimitReader(rand.Reader, contentLength),
+					ContentLength: contentLength,
+					ContentType:   aws.String("application/octet-stream"),
+				})
 				if err != nil {
 					log.Error("upload error", zap.Error(err))
-					// Increment error counter
-					_ = atomic.AddInt64(errorCounter, 1)
+					atomic.AddInt64(errorCounter, 1)
 				} else {
 					log.Debug("file uploaded successfully")
-					// Increment uploaded counter
-					_ = atomic.AddInt64(uploadedCounter, 1)
+					atomic.AddInt64(uploadedCounter, 1)
 				}
 			}
 
-			// Update and print progress
 			processed := atomic.AddInt64(processedCounter, 1)
-			skippedCounter := atomic.LoadInt64(skippedCounter)
-			errorCounter := atomic.LoadInt64(errorCounter)
-			uploadedCounter := atomic.LoadInt64(uploadedCounter)
+			skipped := atomic.LoadInt64(skippedCounter)
+			errors := atomic.LoadInt64(errorCounter)
+			uploaded := atomic.LoadInt64(uploadedCounter)
 			elapsed := time.Since(startTime).Seconds()
 			percent := float64(processed) / float64(total) * 100
-			if processed%printProgressEvery == 0 || processed == int64(total) {
+			if processed%printProgressEvery == 0 || processed == total {
 				rate := float64(processed) / elapsed
 				remaining := float64(total) - float64(processed)
 				eta := time.Duration(remaining/rate) * time.Second
-				log.Sugar().Infof("[PROGRESS] %.2f%% (%d/%d), Uploaded: %d, Skipped: %d, Errors: %d, Rate: %.2f/s, ETA: %s\n",
-					percent, processed, total, uploadedCounter, skippedCounter, errorCounter, rate,
-					eta.Truncate(time.Second),
-				)
+				log.Sugar().Infof("[PROGRESS] %.2f%% (%d/%d), Uploaded: %d, Skipped: %d, Errors: %d, Rate: %.2f/s, ETA: %s",
+					percent, processed, total, uploaded, skipped, errors, rate, eta.Truncate(time.Second))
 			}
 		}
-
 	}
 }
 
 func createLogger(logFilePath string) (*zap.Logger, error) {
-	// Open the log file
 	logFile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return nil, err
 	}
-
-	// Create a zapcore.EncoderConfig
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:        "time",
-		LevelKey:       "level",
-		NameKey:        "logger",
-		CallerKey:      "caller",
-		MessageKey:     "msg",
-		StacktraceKey:  "stacktrace",
-		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.LowercaseLevelEncoder,
-		EncodeTime:     zapcore.ISO8601TimeEncoder,
-		EncodeDuration: zapcore.SecondsDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder,
+		TimeKey:      "time",
+		LevelKey:     "level",
+		MessageKey:   "msg",
+		EncodeLevel:  zapcore.LowercaseLevelEncoder,
+		EncodeTime:   zapcore.ISO8601TimeEncoder,
+		EncodeCaller: zapcore.ShortCallerEncoder,
+		LineEnding:   zapcore.DefaultLineEnding,
 	}
-
-	// Create an encoder
 	encoder := zapcore.NewConsoleEncoder(encoderConfig)
-
-	// Create the cores for file and stderr
 	fileCore := zapcore.NewCore(encoder, zapcore.AddSync(logFile), zapcore.DebugLevel)
 	consoleCore := zapcore.NewCore(encoder, zapcore.AddSync(os.Stderr), zapcore.InfoLevel)
-
-	// Combine them with zapcore.NewTee
 	combinedCore := zapcore.NewTee(fileCore, consoleCore)
-
-	// Create the logger
 	return zap.New(combinedCore, zap.AddCaller()), nil
 }
 
 func main() {
 	if len(os.Args) < 5 {
-		fmt.Println(`Usage: <program> <start> <end> <size> [--force]
-Example: 0 10000 1K
-- <prefix>: Prefix for the files to upload. Can be "large/" or "small/".
-- <start>: Starting index of files to upload
-- <end>: Ending index of files to upload
-- <size>: Size of each file (e.g., 1K, 10M, 1G)
-- [--force]: Optional flag to overwrite existing files`)
+		fmt.Println("Usage: <program> <prefix> <start> <end> <size> [--force]")
 		os.Exit(1)
 	}
 
 	log, err := createLogger(filepath.Join(".", "log.log"))
 	if err != nil {
-		fmt.Printf("Failed to create encoder: %v", err)
+		fmt.Printf("Failed to create logger: %v", err)
 		os.Exit(1)
 	}
 
 	prefix := os.Args[1]
-	if prefix != "large/" && prefix != "small/" {
-		log.Fatal("Invalid prefix. Only 'large/' or 'small/' supported", zap.String("prefix", prefix))
-	}
+	start, _ := strconv.Atoi(os.Args[2])
+	end, _ := strconv.Atoi(os.Args[3])
+	sizeBytes, _ := parseSize(os.Args[4])
+	force := len(os.Args) == 6 && os.Args[5] == "--force"
 
-	start, err := strconv.Atoi(os.Args[2])
-	if err != nil || start < 0 {
-		log.Fatal("Invalid start index", zap.Error(err))
-	}
-
-	end, err := strconv.Atoi(os.Args[3])
-	if err != nil || end > 150000000 || end <= start {
-		log.Fatal("Invalid end index", zap.Error(err), zap.Int("start", start), zap.Int("end", end))
-	}
-
-	sizeBytes, err := parseSize(os.Args[4])
-	if err != nil || sizeBytes <= 0 {
-		log.Fatal("Invalid size", zap.Error(err), zap.Int64("size", sizeBytes))
-	}
-
-	force := false
-	if len(os.Args) < 6 {
-		log.Info("No force flag provided, will check if files exist before uploading")
-	} else if len(os.Args) > 6 {
-		log.Fatal("Too many arguments. Expected 5 or 6 arguments, got", zap.Int("count", len(os.Args)))
-	}
-	if len(os.Args) == 6 && os.Args[5] == "" {
-		log.Info("No force flag provided, will check if files exist before uploading")
-	} else if len(os.Args) == 6 && os.Args[5] != "--force" {
-		log.Fatal("Invalid key. Only --force supported for fifth argument", zap.String("have", os.Args[5]))
-	}
-	if len(os.Args) == 6 && os.Args[5] == "--force" {
-		log.Info("Force flag provided, will overwrite existing files")
-	}
-
-	minioClient, err := minio.New(endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(accessKeyID, secretAccessKey, ""),
-		Secure: useSSL,
-	})
-	if err != nil {
-		log.Fatal("MinIO connection error", zap.Error(err))
-	}
-
-	// Ensure bucket exists
 	ctx := context.Background()
-	ctx, cancelFunc := context.WithCancel(ctx)
-	defer cancelFunc()
-
-	// Setup signal handling for Ctrl+C
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		select {
-		case <-signalChan:
-			log.Debug("Received shutdown signal. Cancelling context...")
-			cancelFunc()
-		case <-ctx.Done():
-			// Context cancelled by other means
-		}
+		<-signalChan
+		cancel()
 	}()
 
-	exists, err := minioClient.BucketExists(ctx, bucketName)
+	cfg, err := config.LoadDefaultConfig(ctx,
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, "")),
+		config.WithRegion("us-east-1"),
+		config.WithEndpointResolverWithOptions(
+			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				return aws.Endpoint{
+					URL:               "https://" + endpoint,
+					SigningRegion:     "us-east-1",
+					HostnameImmutable: true,
+				}, nil
+			}),
+		),
+	)
 	if err != nil {
-		log.Fatal("BucketExists check failed", zap.Error(err))
+		log.Fatal("AWS config error", zap.Error(err))
 	}
-	if !exists {
-		if err := minioClient.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{}); err != nil {
-			log.Fatal("MakeBucket failed", zap.Error(err))
+	s3Client := s3.NewFromConfig(cfg)
+
+	found := false
+	out, err := s3Client.ListBuckets(ctx, &s3.ListBucketsInput{})
+	if err != nil {
+		log.Fatal("Failed to list buckets", zap.Error(err))
+	}
+	for _, b := range out.Buckets {
+		if aws.ToString(b.Name) == bucketName {
+			found = true
+			break
+		}
+	}
+	if !found {
+		_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{
+			Bucket: aws.String(bucketName),
+		})
+		if err != nil {
+			log.Fatal("Create bucket failed", zap.Error(err))
 		}
 	}
 
 	total := int64(end - start)
 	jobs := make(chan int, workers*10)
 	var wg sync.WaitGroup
-	var counter int64 = 0
-	var skippedCounter int64 = 0
-	var errorCounter int64 = 0
-	var uploadedCounter int64 = 0
+	var counter, skipped, uploaded, errors int64
 	startTime := time.Now()
 
-	for worker := range workers {
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
-		go func() {
+		go func(id int) {
 			defer wg.Done()
-			uploadWorker(ctx, minioClient, log.With(zap.Int("worker", worker)), prefix, jobs, sizeBytes, &counter, &skippedCounter, &uploadedCounter, &errorCounter, total, startTime, force)
-		}()
+			uploadWorker(ctx, s3Client, log.With(zap.Int("worker", id)), prefix, jobs, sizeBytes, &counter, &uploaded, &skipped, &errors, total, startTime, force)
+		}(i)
 	}
 
-	for job := start; job < end; job++ {
+	for i := start; i < end; i++ {
 		select {
 		case <-ctx.Done():
-			log.Debug("canceling job queue")
-		case jobs <- job:
-			log.Debug("Job scheduled", zap.Int("job", job))
+			break
+		case jobs <- i:
 		}
 	}
 	close(jobs)
-
 	wg.Wait()
 	log.Info("Upload completed")
 }
