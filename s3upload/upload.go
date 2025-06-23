@@ -24,10 +24,10 @@ import (
 )
 
 const (
-	endpoint           = "localhost:19443"
-	accessKeyID        = "minioadmin"
-	secretAccessKey    = "minio-strong-secret"
-	useSSL             = true
+	endpoint           = "10.200.0.72:18080"
+	accessKeyID        = "XRX3Q4ZK8ANGDV4L3W21"
+	secretAccessKey    = "WcDJBkQs7BLGLaQDPzjEXEIXoFuM5K0R1dnu5Kbk"
+	useSSL             = false
 	bucketName         = "test-bucket"
 	workers            = 500
 	printProgressEvery = 512
