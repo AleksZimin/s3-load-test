@@ -27,7 +27,7 @@ const (
 	secretAccessKey    = "minio-strong-secret"
 	useSSL             = true
 	bucketName         = "test-bucket"
-	workers            = 100
+	workers            = 500
 	printProgressEvery = 512 // How often to update the percentage output
 )
 
