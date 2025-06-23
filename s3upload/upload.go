@@ -220,13 +220,23 @@ func uploadWorker(
 			}
 
 			if needUpload {
+				// _, err := s3Client.PutObject(ctx, &s3.PutObjectInput{
+				// 	Bucket:        aws.String(bucketName),
+				// 	Key:           aws.String(objectName),
+				// 	Body:          io.LimitReader(rand.Reader, contentLength),
+				// 	ContentLength: aws.Int64(contentLength),
+				// 	ContentType:   aws.String("application/octet-stream"),
+				// })
+
 				_, err := s3Client.PutObject(ctx, &s3.PutObjectInput{
-					Bucket:        aws.String(bucketName),
-					Key:           aws.String(objectName),
-					Body:          io.LimitReader(rand.Reader, contentLength),
-					ContentLength: aws.Int64(contentLength),
-					ContentType:   aws.String("application/octet-stream"),
+					Bucket:            aws.String(bucketName),
+					Key:               aws.String(objectName),
+					Body:              io.NopCloser(io.LimitReader(rand.Reader, contentLength)),
+					ContentLength:     aws.Int64(contentLength),
+					ContentType:       aws.String("application/octet-stream"),
+					ChecksumAlgorithm: "", // Disable checksum header
 				})
+
 				if err != nil {
 					log.Error("upload error", zap.Error(err))
 					atomic.AddInt64(errorCounter, 1)
