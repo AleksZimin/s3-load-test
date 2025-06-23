@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	endpoint           = "10.200.0.72:18080"
+	endpoint           = "http://10.200.0.72:18080"
 	accessKeyID        = "XRX3Q4ZK8ANGDV4L3W21"
 	secretAccessKey    = "WcDJBkQs7BLGLaQDPzjEXEIXoFuM5K0R1dnu5Kbk"
 	useSSL             = false
