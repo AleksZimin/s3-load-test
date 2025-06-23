@@ -29,14 +29,14 @@ import (
 )
 
 const (
-	S3_ENDPOINT        = "http://10.200.0.72:18080"
+	S3_ENDPOINT        = "https://10.210.0.67:20443"
 	bucketName         = "test-bucket"
 	workers            = 500
 	printProgressEvery = 512
 	S3_REGION          = "us-east-1"
 	S3_BUCKET          = "test-bucket"
-	S3_ACCESS_KEY      = "XRX3Q4ZK8ANGDV4L3W21"
-	S3_SECRET_KEY      = "WcDJBkQs7BLGLaQDPzjEXEIXoFuM5K0R1dnu5Kbk"
+	S3_ACCESS_KEY      = "ZAHQ335301VAL60MFVPX"
+	S3_SECRET_KEY      = "RwBedrGZXQqi0uP2U2swDgpYNbPmsHoA07gj3B9O"
 )
 
 // Main
