@@ -1,11 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -228,13 +228,19 @@ func uploadWorker(
 				// 	ContentType:   aws.String("application/octet-stream"),
 				// })
 
-				_, err := s3Client.PutObject(ctx, &s3.PutObjectInput{
-					Bucket:            aws.String(bucketName),
-					Key:               aws.String(objectName),
-					Body:              io.NopCloser(io.LimitReader(rand.Reader, contentLength)),
-					ContentLength:     aws.Int64(contentLength),
-					ContentType:       aws.String("application/octet-stream"),
-					ChecksumAlgorithm: "", // Disable checksum header
+				buf := make([]byte, contentLength)
+				_, err := rand.Read(buf)
+				if err != nil {
+					log.Error("failed to generate content", zap.Error(err))
+					atomic.AddInt64(errorCounter, 1)
+					continue
+				}
+				_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
+					Bucket:        aws.String(bucketName),
+					Key:           aws.String(objectName),
+					Body:          bytes.NewReader(buf),
+					ContentLength: aws.Int64(contentLength),
+					ContentType:   aws.String("application/octet-stream"),
 				})
 
 				if err != nil {
