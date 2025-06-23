@@ -1,0 +1,15 @@
+service_type: ingress
+service_id: rgw.s3-test
+placement:
+  hosts:
+    - storage-san-test-0
+    - storage-san-test-1
+    - storage-san-test-2
+    - storage-san-test-3
+    - storage-san-test-4
+spec:
+  backend_service: rgw.s3-test
+  virtual_ip: 10.200.0.72/24
+  frontend_port: 18080
+  monitor_port: 1967
+  virtual_interface_networks: 10.200.0.0/24
