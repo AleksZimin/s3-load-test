@@ -184,7 +184,7 @@ func main() {
 		config.WithEndpointResolverWithOptions(
 			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
 				return aws.Endpoint{
-					URL:               "https://" + endpoint,
+					URL:               endpoint,
 					SigningRegion:     "us-east-1",
 					HostnameImmutable: true,
 				}, nil
