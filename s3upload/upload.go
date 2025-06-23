@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,7 +30,6 @@ import (
 
 const (
 	S3_ENDPOINT        = "http://10.200.0.72:18080"
-	useSSL             = false
 	bucketName         = "test-bucket"
 	workers            = 500
 	printProgressEvery = 512
@@ -72,12 +72,23 @@ func main() {
 		cancel()
 	}()
 
+	transport := &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
+		DialContext:         (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:   true,
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 1000,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	client := &http.Client{
+		Timeout:   time.Second * time.Duration(*timeoutSeconds),
+		Transport: transport,
+	}
+
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(S3_REGION),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(S3_ACCESS_KEY, S3_SECRET_KEY, "")),
-		config.WithHTTPClient(&http.Client{
-			Timeout: time.Second * time.Duration(*timeoutSeconds),
-		}),
+		config.WithHTTPClient(client),
 	)
 
 	retryer := retry.NewStandard(func(o *retry.StandardOptions) {
