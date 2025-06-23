@@ -43,7 +43,7 @@ const (
 
 func main() {
 	s3Endpoint := flag.String("endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
-	timeoutSeconds := flag.Int("connection-timeout", 10, "Connection timeout in seconds")
+	timeoutSeconds := flag.Int("connection-timeout", 60, "Connection timeout in seconds")
 	flag.Parse()
 
 	if len(os.Args) < 5 {
