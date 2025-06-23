@@ -130,14 +130,16 @@ func main() {
 	total := int64(end - start)
 	jobs := make(chan int, workers*10)
 	var wg sync.WaitGroup
-	var counter, skipped, uploaded, errors int64
+	var counter, skipped, uploaded, errors, retries int64
 	startTime := time.Now()
 
 	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			uploadWorker(ctx, s3Client, log.With(zap.Int("worker", id)), prefix, jobs, sizeBytes, &counter, &uploaded, &skipped, &errors, total, startTime, force)
+			uploadWorker(ctx, s3Client, log.With(zap.Int("worker", id)), prefix, jobs, sizeBytes,
+				&counter, &uploaded, &skipped, &errors, &retries, total, startTime, force)
+
 		}(i)
 	}
 
@@ -185,6 +187,7 @@ func uploadWorker(
 	processedCounter *int64,
 	uploadedCounter *int64,
 	skippedCounter *int64,
+	retryCounter *int64,
 	errorCounter *int64,
 	total int64,
 	startTime time.Time,
@@ -241,7 +244,30 @@ func uploadWorker(
 
 				if err != nil {
 					log.Error("upload error", zap.Error(err))
-					atomic.AddInt64(errorCounter, 1)
+					// add retry logic here
+					retryCount := 0
+					for retryCount < 5 {
+						time.Sleep(time.Millisecond * 500 * time.Duration(retryCount+1))
+						_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
+							Bucket:        aws.String(bucketName),
+							Key:           aws.String(objectName),
+							Body:          bytes.NewReader(buf),
+							ContentLength: aws.Int64(contentLength),
+							ContentType:   aws.String("application/octet-stream"),
+						})
+						atomic.AddInt64(retryCounter, 1)
+						if err == nil {
+							log.Debug("file uploaded successfully after retry")
+							atomic.AddInt64(uploadedCounter, 1)
+							break
+						}
+						retryCount++
+					}
+					if err != nil {
+						log.Error("file upload failed after retries", zap.Error(err))
+						// Increment error counter if all retries failed
+						atomic.AddInt64(errorCounter, 1)
+					}
 				} else {
 					log.Debug("file uploaded successfully")
 					atomic.AddInt64(uploadedCounter, 1)
@@ -251,6 +277,7 @@ func uploadWorker(
 			processed := atomic.AddInt64(processedCounter, 1)
 			skipped := atomic.LoadInt64(skippedCounter)
 			errors := atomic.LoadInt64(errorCounter)
+			retries := atomic.LoadInt64(retryCounter)
 			uploaded := atomic.LoadInt64(uploadedCounter)
 			elapsed := time.Since(startTime).Seconds()
 			percent := float64(processed) / float64(total) * 100
@@ -258,8 +285,8 @@ func uploadWorker(
 				rate := float64(processed) / elapsed
 				remaining := float64(total) - float64(processed)
 				eta := time.Duration(remaining/rate) * time.Second
-				log.Sugar().Infof("[PROGRESS] %.2f%% (%d/%d), Uploaded: %d, Skipped: %d, Errors: %d, Rate: %.2f/s, ETA: %s",
-					percent, processed, total, uploaded, skipped, errors, rate, eta.Truncate(time.Second))
+				log.Sugar().Infof("[PROGRESS] %.2f%% (%d/%d), Uploaded: %d, Skipped: %d, Errors: %d, Retries: %d, Rate: %.2f/s, ETA: %s",
+					percent, processed, total, uploaded, skipped, errors, retries, rate, eta.Truncate(time.Second))
 			}
 		}
 	}
