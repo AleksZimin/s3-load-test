@@ -100,7 +100,7 @@ func uploadWorker(
 					Bucket:        aws.String(bucketName),
 					Key:           aws.String(objectName),
 					Body:          io.LimitReader(rand.Reader, contentLength),
-					ContentLength: contentLength,
+					ContentLength: aws.Int64(contentLength),
 					ContentType:   aws.String("application/octet-stream"),
 				})
 				if err != nil {
