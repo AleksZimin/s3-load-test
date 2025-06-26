@@ -50,8 +50,8 @@ var (
 const (
 	S3_REGION     = "us-east-1"
 	S3_BUCKET     = "test-bucket"
-	S3_ACCESS_KEY = "ZAHQ335301VAL60MFVPX"
-	S3_SECRET_KEY = "RwBedrGZXQqi0uP2U2swDgpYNbPmsHoA07gj3B9O"
+	S3_ACCESS_KEY = "4W3X8FJPV47JPJLH25QK"
+	S3_SECRET_KEY = "pEZ4ugfBA1gTPm14XTnSL0IZFmeyWizRDToa8BzJ"
 
 	MODE_AI          = "ai"
 	MODE_SIMPLE      = "simple"
