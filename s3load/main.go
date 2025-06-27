@@ -103,7 +103,7 @@ func main() {
 		fmt.Printf("failed to get hostname: %v\n", err)
 		os.Exit(1)
 	}
-	fileNameSuffix := fmt.Sprintf("%s-%s", userFileNameSuffix, hostname)
+	fileNameSuffix := fmt.Sprintf("%s-%s", *userFileNameSuffix, hostname)
 
 	logFile, err := os.OpenFile(fmt.Sprintf("log-%s.log", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
