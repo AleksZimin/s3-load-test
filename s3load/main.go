@@ -38,8 +38,9 @@ var (
 	BALANCER_ENDPOINT            string = "https://10.210.0.67:19443"
 	BALANCER_ENDPOINT_WITH_CACHE string = "https://10.210.0.67:19444"
 
-	scriptStartTime time.Time
-	totalBytesRead  uint64 = 0
+	scriptStartTime    time.Time
+	scenarioStartBytes uint64 = 0
+	totalBytesRead     uint64 = 0
 
 	requestCountSmall uint64 = 0
 	requestCountLarge uint64 = 0
@@ -396,9 +397,6 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 }
 
 func readRandomLargeFileRange(ctx context.Context, worker int, cycle int, client *s3.Client, rangeSizeMiB int, largeFile string) {
-	// const largeMaxIndex = 50000
-	// fileIdx := rand.Intn(largeMaxIndex) + 1
-	// file := fmt.Sprintf("large/file_%08d.txt", fileIdx)
 	const largeSize = 100 * 1024 * 1024
 	start := rand.Intn(largeSize - rangeSizeMiB*1024*1024)
 	end := start + 1024*1024*rangeSizeMiB
@@ -407,7 +405,7 @@ func readRandomLargeFileRange(ctx context.Context, worker int, cycle int, client
 }
 
 func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key string) {
-	_ = atomic.AddInt64(&readSmallRunning, 1)
+	atomic.AddInt64(&readSmallRunning, 1)
 	start := time.Now()
 	var out *s3.GetObjectOutput
 	var err error
@@ -433,10 +431,10 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 			time.Sleep(timeSleep)
 			continue
 		} else if err == nil {
-			_ = atomic.AddUint64(&requestCountSmall, 1)
+			atomic.AddUint64(&requestCountSmall, 1)
 			break
 		} else {
-			requestCountSmall := atomic.AddUint64(&requestCountSmall, 1)
+			atomic.AddUint64(&requestCountSmall, 1)
 			simultaneous := atomic.AddInt64(&readSmallRunning, -1)
 			failureCountSmall := atomic.AddUint64(&failureCountSmall, 1)
 			errorLogger.Printf("Failed to read small %s: %v, simultaneous %v, failed %v of %v", key, err,
@@ -461,10 +459,12 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 	simultaneous := atomic.AddInt64(&readSmallRunning, -1)
 	if atomic.LoadUint64(&requestCountSmall)%1000 == 0 {
 		log.Printf(
-			"[W%d] Cycle %d: small %s in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			"[W%d] Cycle %d: file %s (read %d B of total %f MiB) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
 			wid,
 			cycle,
 			key,
+			readBytes,
+			float64(totalBytesRead/1024/1024),
 			elapsed,
 			speed,
 			totalSpeed,
@@ -476,7 +476,7 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 }
 
 func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key string, startByte, endByte int) {
-	_ = atomic.AddInt64(&readLargeRunning, 1)
+	atomic.AddInt64(&readLargeRunning, 1)
 	rangeHeader := fmt.Sprintf("bytes=%d-%d", startByte, endByte)
 	var out *s3.GetObjectOutput
 	var err error
@@ -503,7 +503,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 			time.Sleep(timeSleep)
 			continue
 		} else if err == nil {
-			_ = atomic.AddUint64(&requestCountLarge, 1)
+			atomic.AddUint64(&requestCountLarge, 1)
 			break
 		} else {
 
@@ -512,7 +512,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 			failureCountLarge := atomic.AddUint64(&failureCountLarge, 1)
 			requestCountLarge := atomic.AddUint64(&requestCountLarge, 1)
 			errorLogger.Printf(
-				"[W%d] Cycle %d: range %s (0 bytes) in %s (N/A MB/s) simultaneous %v, failed %v of %v",
+				"[W%d] Cycle %d: file %s (0 bytes) in %s (N/A MB/s) simultaneous %v, failed %v of %v",
 				wid,
 				cycle,
 				key,
@@ -542,11 +542,13 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	simultaneous := atomic.AddInt64(&readLargeRunning, -1)
 	if atomic.LoadUint64(&requestCountLarge)%1000 == 0 {
 		log.Printf(
-			"[W%d] Cycle %d: range %s (%d bytes) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			"[W%d] Cycle %d: file %s range: %s (read %f MiB of total %f MiB) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
 			wid,
 			cycle,
 			key,
-			readBytes,
+			rangeHeader,
+			float64(readBytes/1024/1024),
+			float64(totalBytesRead/1024/1024),
 			elapsed,
 			speed,
 			totalSpeed,
@@ -557,43 +559,45 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	}
 }
 
-func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, smallStart, smallEnd, threadsAmount, rangeSizeMb int, duration time.Duration) {
-	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, smallStart=%d smallEnd=%d threadsAmount=%d url=%s", name, mode, workers, rangeSizeMb, smallStart, smallEnd, threadsAmount, *client.Options().BaseEndpoint)
+func runScenario(parentCtx context.Context, name string, client *s3.Client, mode string, workers, cycles, rangeSmallStart, rangeSmallEnd, threadsAmount, rangeSizeMb int, duration time.Duration) {
+	scenarioLogger.Printf("Start %s: mode=%s workers=%d range=%dMB, smallStart=%d smallEnd=%d threadsAmount=%d url=%s", name, mode, workers, rangeSizeMb, rangeSmallStart, rangeSmallEnd, threadsAmount, *client.Options().BaseEndpoint)
 	startTime := time.Now()
-	startSmall := atomic.LoadUint64(&requestCountSmall)
-	startLarge := atomic.LoadUint64(&requestCountLarge)
-	startBytes := atomic.LoadUint64(&totalBytesRead)
-
 	scriptStartTime = startTime
+
+	// Reset counters
+	atomic.StoreInt64(&readSmallRunning, 0)
+	atomic.StoreInt64(&readLargeRunning, 0)
+	atomic.StoreUint64(&requestCountSmall, 0)
+	atomic.StoreUint64(&requestCountLarge, 0)
+	atomic.StoreUint64(&totalBytesRead, 0)
+	atomic.StoreUint64(&failureCountSmall, 0)
+	atomic.StoreUint64(&failureCountLarge, 0)
+
 	ctx, cancel := context.WithTimeout(parentCtx, duration)
-	runLoadTest(ctx, client, mode, workers, cycles, smallStart, smallEnd, threadsAmount, rangeSizeMb)
+	runLoadTest(ctx, client, mode, workers, cycles, rangeSmallStart, rangeSmallEnd, threadsAmount, rangeSizeMb)
 	cancel()
 
 	elapsed := time.Since(startTime)
-	smallDone := atomic.LoadUint64(&requestCountSmall) - startSmall
-	largeDone := atomic.LoadUint64(&requestCountLarge) - startLarge
-	bytesDone := atomic.LoadUint64(&totalBytesRead) - startBytes
-	failureCountSmall := atomic.LoadUint64(&failureCountSmall)
-	failureCountLarge := atomic.LoadUint64(&failureCountLarge)
-	speed := float64(bytesDone) / elapsed.Seconds() / 1024 / 1024
+	// speed := float64(bytesDone) / elapsed.Seconds() / 1024 / 1024
+	speed := float64(atomic.LoadUint64(&totalBytesRead)) / elapsed.Seconds() / 1024 / 1024
 
-	scenarioLogger.Printf("Finish %s: duration=%s; small count total=%d; small count failed=%d; large count total=%d; large count failed=%d; megabytes=%d; avgSpeed=%.2f MB/s", name, elapsed, smallDone, failureCountSmall, largeDone, failureCountLarge, bytesDone/1024/1024, speed)
+	scenarioLogger.Printf("Finish %s: duration=%s; small count total=%d; small count failed=%d; large count total=%d; large count failed=%d; megabytes=%d; avgSpeed=%.2f MB/s", name, elapsed, atomic.LoadUint64(&requestCountSmall), atomic.LoadUint64(&failureCountSmall), atomic.LoadUint64(&requestCountLarge), atomic.LoadUint64(&failureCountLarge), atomic.LoadUint64(&totalBytesRead)/1024/1024, speed)
 	csvLogger.Printf("%s,%s,%d,%d,%d,%d,%d,%d,%.2f,%s,%d,%d,%d,%d,%.2f,%.2f",
 		name,
 		mode,
 		workers,
 		rangeSizeMb,
 		threadsAmount,
-		smallStart,
-		smallEnd,
-		smallEnd-smallStart+1,
+		rangeSmallStart,
+		rangeSmallEnd,
+		rangeSmallEnd-rangeSmallStart+1,
 		elapsed.Minutes(),
 		*client.Options().BaseEndpoint,
-		smallDone,
-		failureCountSmall,
-		largeDone,
-		failureCountLarge,
-		float64(bytesDone)/1024/1024,
+		atomic.LoadUint64(&requestCountSmall),
+		atomic.LoadUint64(&failureCountSmall),
+		atomic.LoadUint64(&requestCountLarge),
+		atomic.LoadUint64(&failureCountLarge),
+		float64(atomic.LoadUint64(&totalBytesRead))/1024/1024,
 		speed,
 	)
 }
