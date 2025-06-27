@@ -74,6 +74,7 @@ func main() {
 	cycles := flag.Int("cycles", -1, "Number of cycles per worker")
 	rangeSizeMb := flag.Int("range-size-mb", 10, "Large file download range size")
 	timeoutSeconds := flag.Int("connection-timeout", 0, "Connection timeout in seconds")
+	userFileNameSuffix := flag.String("file-suffix", time.Now().Format("2006-01-02_15-04"), "Suffix for log files (default is timestamp)")
 	flag.Parse()
 
 	if *workers <= 0 || *smallStart < 0 || *smallEnd <= 0 || *smallStart >= *smallEnd {
@@ -102,7 +103,7 @@ func main() {
 		fmt.Printf("failed to get hostname: %v\n", err)
 		os.Exit(1)
 	}
-	fileNameSuffix := fmt.Sprintf("%s-%s", hostname, time.Now().Format("2006-01-02_15-04"))
+	fileNameSuffix := fmt.Sprintf("%s-%s", userFileNameSuffix, hostname)
 
 	logFile, err := os.OpenFile(fmt.Sprintf("log-%s.log", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
