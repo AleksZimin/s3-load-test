@@ -4,9 +4,23 @@
 
 ### Creating folders for cache
 
-```
-mkdir -p /var/cache/nginx/s3_cache
-chown -R nginx:nginx /var/cache/nginx/s3_cache
+```shell
+mkdir -p /var/cache/nginx/minio_cache
+mkdir -p /var/cache/nginx/ceph_s3_cache
+
+export MY_USER=$(grep -E '^user\s+' /etc/nginx/nginx.conf | awk '{print $2}' | sed 's/;$//')
+if [ -z "$MY_USER" ]; then
+    echo "Nginx user not found in /etc/nginx/nginx.conf"
+    MY_USER="_nginx"
+fi
+export MY_GROUP=$(id -gn $MY_USER)
+echo "nging user/group: ${MY_USER}:${MY_GROUP}"
+
+chown -R ${MY_USER}:${MY_GROUP} /var/cache/nginx/minio_cache
+chown -R ${MY_USER}:${MY_GROUP} /var/cache/nginx/ceph_s3_cache
+
+ls -lah /var/cache/nginx/*
+
 ```
 
 Note: User that nginx runs as can be taken from nginx.conf
