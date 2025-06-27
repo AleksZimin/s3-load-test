@@ -33,17 +33,17 @@ import (
 const (
 	S3_ENDPOINT = "http://10.200.0.71:9000"
 	// bucketName         = "test-bucket"
-	workers            = 100
-	printProgressEvery = 16
-	S3_REGION          = "us-east-1"
-	S3_BUCKET          = "test-bucket"
-	S3_ACCESS_KEY      = "5VJ907S254RGGXD6GE90"
-	S3_SECRET_KEY      = "qUYBucNNkGjAWptxihD2CAJhoemz7EOYw2gkzJvv"
+	defaultWorkers            = 100
+	defaultPrintProgressEvery = 512
+	S3_REGION                 = "us-east-1"
+	S3_BUCKET                 = "test-bucket"
+	S3_ACCESS_KEY             = "5VJ907S254RGGXD6GE90"
+	S3_SECRET_KEY             = "qUYBucNNkGjAWptxihD2CAJhoemz7EOYw2gkzJvv"
 )
 
 // Main
 func main() {
-	workers := flag.Int("workers", 10, "Number of parallel workers")
+	workers := flag.Int("workers", defaultWorkers, "Number of parallel workers")
 	start := flag.Int("start", 0, "Start of small file range")
 	end := flag.Int("end", 1000, "End of small file range")
 	timeoutSeconds := flag.Int("connection-timeout", 10, "Connection timeout in seconds")
@@ -55,6 +55,7 @@ func main() {
 	s3AccessKey := flag.String("access-key", S3_ACCESS_KEY, "S3 access key ID")
 	s3SecretKey := flag.String("secret-key", S3_SECRET_KEY, "S3 secret access key")
 	force := flag.Bool("force", false, "Force execution even if files exist")
+	printProgressEvery := flag.Int("print-progress-every", defaultPrintProgressEvery, "Print progress every N files")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
@@ -187,7 +188,7 @@ func main() {
 		go func(id int) {
 			defer wg.Done()
 			uploadWorker(ctx, s3Client, log.With(zap.Int("worker", id)), *prefix, jobs, sizeBytes,
-				&counter, &uploaded, &skipped, &errors, &retries, total, startTime, *force, *s3Bucket)
+				&counter, &uploaded, &skipped, &errors, &retries, total, startTime, *force, *s3Bucket, int64(*printProgressEvery))
 
 		}(i)
 	}
@@ -246,6 +247,7 @@ func uploadWorker(
 	startTime time.Time,
 	force bool,
 	s3Bucket string,
+	printProgressEvery int64,
 ) {
 
 	for {
