@@ -62,8 +62,9 @@ func main() {
 	MODES := fmt.Sprintf("(%s|%s|%s)", MODE_AI, MODE_SIMPLE, MODE_ALLSCENARIO)
 
 	mode := flag.String("mode", MODE_AI, fmt.Sprintf("Select mode (%s)", MODES))
-	s3Endpoint := flag.String("endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
-	s3EndpointWithCache := flag.String("cache-endpoint-url", S3_ENDPOINT_WITH_CACHE, "S3 endpoint URL with cache")
+	balancerEndpoint := flag.String("balancer-endpoint-url", S3_ENDPOINT, "Balancer endpoint URL")
+	balancerEndpointWithCache := flag.String("balancer-with-cache-endpoint-url", S3_ENDPOINT_WITH_CACHE, "Balancer endpoint URL with cache")
+	s3EndpointURL := flag.String("s3-endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
 	workers := flag.Int("workers", 10, "Number of parallel workers")
 	smallStart := flag.Int("small-start", 0, "Start of small file range")
 	smallEnd := flag.Int("small-end", 0, "End of small file range")
@@ -170,18 +171,25 @@ func main() {
 		o.RateLimiter = ratelimit.None // Disable rate limiting
 	})
 
-	s3client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 		o.DisableLogOutputChecksumValidationSkipped = true
 		o.Retryer = retryer
-		o.BaseEndpoint = aws.String(*s3Endpoint)
+		o.BaseEndpoint = aws.String(*s3EndpointURL)
 	})
 
-	s3clientWithCache := s3.NewFromConfig(cfg, func(o *s3.Options) {
+	s3clientWithBanacer := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		o.UsePathStyle = true
 		o.DisableLogOutputChecksumValidationSkipped = true
 		o.Retryer = retryer
-		o.BaseEndpoint = aws.String(*s3EndpointWithCache)
+		o.BaseEndpoint = aws.String(*balancerEndpoint)
+	})
+
+	s3clientWithBalancerAndCache := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.UsePathStyle = true
+		o.DisableLogOutputChecksumValidationSkipped = true
+		o.Retryer = retryer
+		o.BaseEndpoint = aws.String(*balancerEndpointWithCache)
 	})
 
 	scriptStartTime = time.Now()
@@ -194,44 +202,49 @@ func main() {
 		timeToLoad := 30 * time.Minute
 		timeSleep := 15 * time.Minute
 
-		runScenario(ctx, "ai-workers-10-range1", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range1", s3Client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-10-range1-with-cache", s3clientWithCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range1-with-cache", s3clientWithBanacer, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-20-range1", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range1-with-balancer-and-cache", s3clientWithBalancerAndCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-20-range1-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		runScenario(ctx, "ai-workers-20-range1", s3Client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-10-range10", s3client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		runScenario(ctx, "ai-workers-20-range1-with-cache", s3clientWithBalancerAndCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-10-range10-with-cache", s3clientWithCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range10", s3Client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-20-range10", s3client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		runScenario(ctx, "ai-workers-10-range10-with-cache", s3clientWithBalancerAndCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "ai-workers-20-range10-with-cache", s3clientWithCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		runScenario(ctx, "ai-workers-20-range10", s3Client, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		if ctx.Err() == nil {
+			waitWithContext(ctx, timeSleep)
+		}
+
+		runScenario(ctx, "ai-workers-20-range10-with-cache", s3clientWithBalancerAndCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 	default:
-		runLoadTest(ctx, s3client, *mode, *workers, *cycles, *smallStart, *smallEnd, *threadsAmount, *rangeSizeMb)
+		runLoadTest(ctx, s3Client, *mode, *workers, *cycles, *smallStart, *smallEnd, *threadsAmount, *rangeSizeMb)
 	}
 }
 
