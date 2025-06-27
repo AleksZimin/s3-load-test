@@ -205,8 +205,8 @@ func main() {
 		// timeToLoad := 1 * time.Minute
 		// timeSleep := 2 * time.Minute
 
-		timeToLoad := 20 * time.Second
-		timeSleep := 10 * time.Second
+		timeToLoad := 10 * time.Second
+		timeSleep := 5 * time.Second
 
 		runScenario(ctx, "ai-workers-10-range1", s3Client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
