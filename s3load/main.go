@@ -29,13 +29,14 @@ import (
 )
 
 var (
-	readSmallRunning       int64 = 0
-	readLargeRunning       int64 = 0
-	errorLogger            *log.Logger
-	scenarioLogger         *log.Logger
-	csvLogger              *log.Logger
-	S3_ENDPOINT            string = "https://10.210.0.67:19443"
-	S3_ENDPOINT_WITH_CACHE string = "https://10.210.0.67:19444"
+	readSmallRunning             int64 = 0
+	readLargeRunning             int64 = 0
+	errorLogger                  *log.Logger
+	scenarioLogger               *log.Logger
+	csvLogger                    *log.Logger
+	S3_ENDPOINT                  string = "http://127.0.0.1:9000"
+	BALANCER_ENDPOINT            string = "https://10.210.0.67:19443"
+	BALANCER_ENDPOINT_WITH_CACHE string = "https://10.210.0.67:19444"
 
 	scriptStartTime time.Time
 	totalBytesRead  uint64 = 0
@@ -62,9 +63,9 @@ func main() {
 	MODES := fmt.Sprintf("(%s|%s|%s)", MODE_AI, MODE_SIMPLE, MODE_ALLSCENARIO)
 
 	mode := flag.String("mode", MODE_AI, fmt.Sprintf("Select mode (%s)", MODES))
-	balancerEndpoint := flag.String("balancer-endpoint-url", S3_ENDPOINT, "Balancer endpoint URL")
-	balancerEndpointWithCache := flag.String("balancer-with-cache-endpoint-url", S3_ENDPOINT_WITH_CACHE, "Balancer endpoint URL with cache")
 	s3EndpointURL := flag.String("s3-endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
+	balancerEndpoint := flag.String("balancer-endpoint-url", BALANCER_ENDPOINT, "Balancer endpoint URL")
+	balancerEndpointWithCache := flag.String("balancer-with-cache-endpoint-url", BALANCER_ENDPOINT_WITH_CACHE, "Balancer endpoint URL with cache")
 	workers := flag.Int("workers", 10, "Number of parallel workers")
 	smallStart := flag.Int("small-start", 0, "Start of small file range")
 	smallEnd := flag.Int("small-end", 0, "End of small file range")
