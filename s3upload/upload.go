@@ -160,6 +160,7 @@ func main() {
 		log.Fatal("Failed to list buckets", zap.Error(err))
 	}
 	for _, b := range out.Buckets {
+		log.Debug("Found bucket", zap.String("name", aws.ToString(b.Name)))
 		if aws.ToString(b.Name) == *s3Bucket {
 			found = true
 			break
