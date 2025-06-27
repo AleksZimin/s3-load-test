@@ -460,7 +460,7 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 	simultaneous := atomic.AddInt64(&readSmallRunning, -1)
 	if atomic.LoadUint64(&requestCountSmall)%1000 == 0 {
 		log.Printf(
-			"[W%d] Cycle %d: file %s (read %d B of total %f MiB) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			"[W%d] Cycle %d: file %s (read %d B of total %.2f MiB) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
 			wid,
 			cycle,
 			key,
@@ -543,7 +543,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	simultaneous := atomic.AddInt64(&readLargeRunning, -1)
 	if atomic.LoadUint64(&requestCountLarge)%1000 == 0 {
 		log.Printf(
-			"[W%d] Cycle %d: file %s range: %s (read %f MiB of total %f MiB) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			"[W%d] Cycle %d: file %s range: %s (read %.2f MiB of total %.2f MiB) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
 			wid,
 			cycle,
 			key,
