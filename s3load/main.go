@@ -202,8 +202,11 @@ func main() {
 		// Create header for CSV file
 		csvLogger.Println("Scenario,Load type,Workers count,Range size for 100MB files (MB),Threads per worker,Start range for 1KB files,End range for 1KB files,Number of small files in range,Test duration (minutes),URL,Processed small files,Errors while processing small files,Processed large files,Errors while processing large files,Downloaded data (MB),Average download speed (MB/s)")
 
-		timeToLoad := 1 * time.Minute
-		timeSleep := 2 * time.Minute
+		// timeToLoad := 1 * time.Minute
+		// timeSleep := 2 * time.Minute
+
+		timeToLoad := 20 * time.Second
+		timeSleep := 10 * time.Second
 
 		runScenario(ctx, "ai-workers-10-range1", s3Client, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
