@@ -79,7 +79,7 @@ func main() {
 	timeoutSeconds := flag.Int("connection-timeout", 0, "Connection timeout in seconds")
 	userFileNameSuffix := flag.String("file-suffix", time.Now().Format("2006-01-02_15-04"), "Suffix for log files (default is timestamp)")
 	flag.Uint64Var(&progressEvery, "progress-every", 1000, "Log progress every N requests (default 1000)")
-	flag.StringVar(&downloadType, "download-type", "lagre", "Download type (large or small)")
+	flag.StringVar(&downloadType, "download-type", "large", "Download type (large or small)")
 
 	flag.Parse()
 
@@ -362,9 +362,10 @@ func runLoadTest(ctx context.Context, client *s3.Client, mode string, workers, c
 				case MODE_DOWNLOAD_FULL:
 					idx := rand.Intn(smallEnd-smallStart+1) + smallStart
 					var fileToDownload string
-					if downloadType == "small" {
+					switch downloadType {
+					case "small":
 						fileToDownload = fmt.Sprintf("small/file_%08d.txt", idx)
-					} else {
+					case "large":
 						fileToDownload = fmt.Sprintf("large/file_%08d.txt", idx/1000)
 					}
 
