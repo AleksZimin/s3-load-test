@@ -112,20 +112,6 @@ func main() {
 	}
 	defer logFile.Close()
 
-	scenarioFile, err := os.OpenFile(fmt.Sprintf("scenario-%s.log", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		fmt.Printf("failed to open scenario log file: %v\n", err)
-		os.Exit(1)
-	}
-	defer scenarioFile.Close()
-
-	csvFile, err := os.OpenFile(fmt.Sprintf("csv-%s.csv", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		fmt.Printf("failed to open CSV log file: %v\n", err)
-		os.Exit(1)
-	}
-	defer csvFile.Close()
-
 	errorLogger = log.New(logFile, "ERROR: ", log.LstdFlags|log.Lmicroseconds)
 
 	ctx := context.Background()
@@ -196,6 +182,20 @@ func main() {
 
 	switch *mode {
 	case MODE_ALLSCENARIO:
+		scenarioFile, err := os.OpenFile(fmt.Sprintf("scenario-%s.log", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			fmt.Printf("failed to open scenario log file: %v\n", err)
+			os.Exit(1)
+		}
+		defer scenarioFile.Close()
+
+		csvFile, err := os.OpenFile(fmt.Sprintf("csv-%s.csv", fileNameSuffix), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err != nil {
+			fmt.Printf("failed to open CSV log file: %v\n", err)
+			os.Exit(1)
+		}
+		defer csvFile.Close()
+
 		scenarioLogger = log.New(scenarioFile, "", log.LstdFlags|log.Lmicroseconds)
 		// logger to generate CSV output without timestamps
 		csvLogger = log.New(csvFile, "", 0)
