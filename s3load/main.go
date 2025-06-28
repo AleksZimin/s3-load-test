@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	readSmallRunning             int64 = 0
+	readFullFileRunning          int64 = 0
 	readLargeRunning             int64 = 0
 	errorLogger                  *log.Logger
 	scenarioLogger               *log.Logger
@@ -37,16 +37,17 @@ var (
 	S3_ENDPOINT                  string = "http://127.0.0.1:9000"
 	BALANCER_ENDPOINT            string = "https://10.210.0.67:19443"
 	BALANCER_ENDPOINT_WITH_CACHE string = "https://10.210.0.67:19444"
+	progressEvery                uint64
+	downloadType                 string
 
-	scriptStartTime    time.Time
-	scenarioStartBytes uint64 = 0
-	totalBytesRead     uint64 = 0
+	scriptStartTime time.Time
+	totalBytesRead  uint64 = 0
 
-	requestCountSmall uint64 = 0
-	requestCountLarge uint64 = 0
+	requestCountReadFullFile uint64 = 0
+	requestCountLarge        uint64 = 0
 
-	failureCountSmall uint64 = 0
-	failureCountLarge uint64 = 0
+	failureCountReadFullFile uint64 = 0
+	failureCountLarge        uint64 = 0
 )
 
 const (
@@ -55,13 +56,15 @@ const (
 	S3_ACCESS_KEY = "5VJ907S254RGGXD6GE90"
 	S3_SECRET_KEY = "qUYBucNNkGjAWptxihD2CAJhoemz7EOYw2gkzJvv"
 
-	MODE_AI          = "ai"
-	MODE_SIMPLE      = "simple"
+	MODE_AI             = "ai"
+	MODE_DOWNLOAD_RANGE = "download-range"
+	MODE_DOWNLOAD_FULL  = "download-full"
+
 	MODE_ALLSCENARIO = "all-scenarios"
 )
 
 func main() {
-	MODES := fmt.Sprintf("(%s|%s|%s)", MODE_AI, MODE_SIMPLE, MODE_ALLSCENARIO)
+	MODES := fmt.Sprintf("(%s|%s|%s)", MODE_AI, MODE_DOWNLOAD_RANGE, MODE_ALLSCENARIO)
 
 	mode := flag.String("mode", MODE_AI, fmt.Sprintf("Select mode (%s)", MODES))
 	s3EndpointURL := flag.String("s3-endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
@@ -70,11 +73,14 @@ func main() {
 	workers := flag.Int("workers", 10, "Number of parallel workers")
 	smallStart := flag.Int("small-start", 0, "Start of small file range")
 	smallEnd := flag.Int("small-end", 0, "End of small file range")
-	threadsAmount := flag.Int("small-count", 1000, "Number threads to read simultaneously")
+	threadsAmount := flag.Int("small-threads-count", 1000, "Number threads to read small file simultaneously in AI mode")
 	cycles := flag.Int("cycles", -1, "Number of cycles per worker")
 	rangeSizeMb := flag.Int("range-size-mb", 10, "Large file download range size")
 	timeoutSeconds := flag.Int("connection-timeout", 0, "Connection timeout in seconds")
 	userFileNameSuffix := flag.String("file-suffix", time.Now().Format("2006-01-02_15-04"), "Suffix for log files (default is timestamp)")
+	flag.Uint64Var(&progressEvery, "progress-every", 1000, "Log progress every N requests (default 1000)")
+	flag.StringVar(&downloadType, "download-type", "lagre", "Download type (large or small)")
+
 	flag.Parse()
 
 	if *workers <= 0 || *smallStart < 0 || *smallEnd <= 0 || *smallStart >= *smallEnd {
@@ -88,7 +94,7 @@ func main() {
 		  - <small-count> simultaneous:
 		  	- Read small/file<rand(small-start, small-end)>.txt
 			- Read range of <range-size-mb> size in random location of large/largefile_<rand(small-start/1000, small-end/1000)>.txt, assuming large file size 100Mb
-		- simple:
+		- download-range:
 		  - Read range of <range-size-mb> size in random location of large/largefile_<rand(small-start/1000, small-end/1000)>.txt, assuming large file size 100Mb
 		
 		Common options:
@@ -268,62 +274,62 @@ func main() {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-50-range1", s3Client, MODE_SIMPLE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		runScenario(ctx, "download-range-workers-50-range1", s3Client, MODE_DOWNLOAD_RANGE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-50-range1-with-balancer", s3clientWithBanacer, MODE_SIMPLE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		runScenario(ctx, "download-range-workers-50-range1-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-100-range1", s3Client, MODE_SIMPLE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		runScenario(ctx, "download-range-workers-100-range1", s3Client, MODE_DOWNLOAD_RANGE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-100-range1-with-balancer", s3clientWithBanacer, MODE_SIMPLE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		runScenario(ctx, "download-range-workers-100-range1-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-50-range10", s3Client, MODE_SIMPLE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		runScenario(ctx, "download-range-workers-50-range10", s3Client, MODE_DOWNLOAD_RANGE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-50-range10-with-balancer", s3clientWithBanacer, MODE_SIMPLE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		runScenario(ctx, "download-range-workers-50-range10-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-100-range10", s3Client, MODE_SIMPLE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		runScenario(ctx, "download-range-workers-100-range10", s3Client, MODE_DOWNLOAD_RANGE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-100-range10-with-balancer", s3clientWithBanacer, MODE_SIMPLE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		runScenario(ctx, "download-range-workers-100-range10-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-50-range99", s3Client, MODE_SIMPLE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 99, timeToLoad)
+		runScenario(ctx, "download-range-workers-50-range99", s3Client, MODE_DOWNLOAD_RANGE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 99, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-50-range99-with-balancer", s3clientWithBanacer, MODE_SIMPLE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 99, timeToLoad)
+		runScenario(ctx, "download-range-workers-50-range99-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 50, *cycles, *smallStart, *smallEnd, *threadsAmount, 99, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-100-range99", s3Client, MODE_SIMPLE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 99, timeToLoad)
+		runScenario(ctx, "download-range-workers-100-range99", s3Client, MODE_DOWNLOAD_RANGE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 99, timeToLoad)
 		if ctx.Err() == nil {
 			waitWithContext(ctx, timeSleep)
 		}
 
-		runScenario(ctx, "simple-workers-100-range99-with-balancer", s3clientWithBanacer, MODE_SIMPLE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 99, timeToLoad)
+		runScenario(ctx, "download-range-workers-100-range99-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 99, timeToLoad)
 		scenarioLogger.Printf("All scenarios finished")
 		return
 	default:
@@ -348,11 +354,22 @@ func runLoadTest(ctx context.Context, client *s3.Client, mode string, workers, c
 				switch mode {
 				case MODE_AI:
 					runAIWorker(ctx, worker, cycle, client, smallStart, smallEnd, threadsAmount, rangeSizeMb)
-				case MODE_SIMPLE:
+				case MODE_DOWNLOAD_RANGE:
 					idx := rand.Intn(smallEnd-smallStart+1) + smallStart
 					largeFile := fmt.Sprintf("large/file_%08d.txt", idx/1000)
 
 					readRandomLargeFileRange(ctx, worker, cycle, client, rangeSizeMb, largeFile)
+				case MODE_DOWNLOAD_FULL:
+					idx := rand.Intn(smallEnd-smallStart+1) + smallStart
+					var fileToDownload string
+					if downloadType == "small" {
+						fileToDownload = fmt.Sprintf("small/file_%08d.txt", idx)
+					} else {
+						fileToDownload = fmt.Sprintf("large/file_%08d.txt", idx/1000)
+					}
+
+					readFullFile(ctx, client, worker, cycle, fileToDownload)
+
 				}
 			}
 		}(worker)
@@ -365,7 +382,7 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 	// Read 1 random small file
 	smallIdx := rand.Intn(smallEnd-smallStart+1) + smallStart
 	smallFile := fmt.Sprintf("small/file_%08d.txt", smallIdx)
-	readSmallFile(ctx, client, worker, cycle, smallFile)
+	readFullFile(ctx, client, worker, cycle, smallFile)
 
 	// Read threadsAmount random small files in parallel
 	wg.Add(threadsAmount)
@@ -384,7 +401,7 @@ func runAIWorker(ctx context.Context, worker, cycle int, client *s3.Client, smal
 			default:
 			}
 
-			readSmallFile(ctx, client, worker, cycle, smallFile)
+			readFullFile(ctx, client, worker, cycle, smallFile)
 
 			select {
 			case <-ctx.Done():
@@ -408,8 +425,8 @@ func readRandomLargeFileRange(ctx context.Context, worker int, cycle int, client
 	readLargeRange(ctx, client, worker, cycle, largeFile, start, end)
 }
 
-func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key string) {
-	atomic.AddInt64(&readSmallRunning, 1)
+func readFullFile(ctx context.Context, client *s3.Client, wid, cycle int, key string) {
+	atomic.AddInt64(&readFullFileRunning, 1)
 	start := time.Now()
 	var out *s3.GetObjectOutput
 	var err error
@@ -425,26 +442,26 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 		var errMaxAttempts *retry.MaxAttemptsError
 
 		if errors.As(err, &errQuotaExceed) || errors.As(err, &errMaxAttempts) {
-			errorLogger.Printf("Failed to read small %s: %v in %s. Retrying", key, err, elapsed)
+			errorLogger.Printf("Failed to read full file %s: %v in %s. Retrying", key, err, elapsed)
 			timeSleep := 5 * time.Second
 			if attempt < 10 {
 				timeSleep = min(time.Duration(100*(1<<attempt))*time.Millisecond, 5*time.Second)
 				attempt++
 			}
-			errorLogger.Printf("Sleeping for %s before retrying small %s", timeSleep, key)
+			errorLogger.Printf("Sleeping for %s before retrying read full file %s", timeSleep, key)
 			time.Sleep(timeSleep)
 			continue
 		} else if err == nil {
-			atomic.AddUint64(&requestCountSmall, 1)
+			atomic.AddUint64(&requestCountReadFullFile, 1)
 			break
 		} else {
-			atomic.AddUint64(&requestCountSmall, 1)
-			simultaneous := atomic.AddInt64(&readSmallRunning, -1)
-			failureCountSmall := atomic.AddUint64(&failureCountSmall, 1)
-			errorLogger.Printf("Failed to read small %s: %v, simultaneous %v, failed %v of %v", key, err,
+			atomic.AddUint64(&requestCountReadFullFile, 1)
+			simultaneous := atomic.AddInt64(&readFullFileRunning, -1)
+			failureCountSmall := atomic.AddUint64(&failureCountReadFullFile, 1)
+			errorLogger.Printf("Failed to read full file %s: %v, simultaneous %v, failed %v of %v", key, err,
 				simultaneous,
 				failureCountSmall,
-				requestCountSmall)
+				requestCountReadFullFile)
 			return
 		}
 	}
@@ -452,7 +469,7 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 
 	readBytes, err := io.Copy(io.Discard, out.Body)
 	if err != nil {
-		errorLogger.Printf("Failed to read body of small %s: %v", key, err)
+		errorLogger.Printf("Failed to read body of full file %s: %v", key, err)
 	}
 	elapsed := time.Since(start)
 	elapsedScript := time.Since(scriptStartTime)
@@ -460,21 +477,22 @@ func readSmallFile(ctx context.Context, client *s3.Client, wid, cycle int, key s
 	speed := float64(readBytes) / elapsed.Seconds() / 1024 / 1024
 	totalSpeed := float64(totalBytesRead) / elapsedScript.Seconds() / 1024 / 1024
 
-	simultaneous := atomic.AddInt64(&readSmallRunning, -1)
-	if atomic.LoadUint64(&requestCountSmall)%1000 == 0 {
+	simultaneous := atomic.AddInt64(&readFullFileRunning, -1)
+	if atomic.LoadUint64(&requestCountReadFullFile)%progressEvery == 0 {
 		log.Printf(
-			"[W%d] Cycle %d: file %s (read %d B of total %.2f MiB) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			"[W%d] Cycle %d: file %s (read %d B of total %.2f MiB) in %s of total %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
 			wid,
 			cycle,
 			key,
 			readBytes,
 			float64(totalBytesRead/1024/1024),
 			elapsed,
+			elapsedScript,
 			speed,
 			totalSpeed,
 			simultaneous,
-			atomic.LoadUint64(&failureCountSmall),
-			atomic.LoadUint64(&requestCountSmall),
+			atomic.LoadUint64(&failureCountReadFullFile),
+			atomic.LoadUint64(&requestCountReadFullFile),
 		)
 	}
 }
@@ -544,9 +562,9 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	totalSpeed := float64(totalBytesRead) / elapsedScript.Seconds() / 1024 / 1024
 
 	simultaneous := atomic.AddInt64(&readLargeRunning, -1)
-	if atomic.LoadUint64(&requestCountLarge)%1000 == 0 {
+	if atomic.LoadUint64(&requestCountLarge)%progressEvery == 0 {
 		log.Printf(
-			"[W%d] Cycle %d: file %s range: %s (read %.2f MiB of total %.2f MiB) in %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			"[W%d] Cycle %d: file %s range: %s (read %.2f MiB of total %.2f MiB) in %s of total %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
 			wid,
 			cycle,
 			key,
@@ -554,6 +572,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 			float64(readBytes/1024/1024),
 			float64(totalBytesRead/1024/1024),
 			elapsed,
+			elapsedScript,
 			speed,
 			totalSpeed,
 			simultaneous,
@@ -569,12 +588,12 @@ func runScenario(parentCtx context.Context, name string, client *s3.Client, mode
 	scriptStartTime = startTime
 
 	// Reset counters
-	atomic.StoreInt64(&readSmallRunning, 0)
+	atomic.StoreInt64(&readFullFileRunning, 0)
 	atomic.StoreInt64(&readLargeRunning, 0)
-	atomic.StoreUint64(&requestCountSmall, 0)
+	atomic.StoreUint64(&requestCountReadFullFile, 0)
 	atomic.StoreUint64(&requestCountLarge, 0)
 	atomic.StoreUint64(&totalBytesRead, 0)
-	atomic.StoreUint64(&failureCountSmall, 0)
+	atomic.StoreUint64(&failureCountReadFullFile, 0)
 	atomic.StoreUint64(&failureCountLarge, 0)
 
 	ctx, cancel := context.WithTimeout(parentCtx, duration)
@@ -585,7 +604,7 @@ func runScenario(parentCtx context.Context, name string, client *s3.Client, mode
 	// speed := float64(bytesDone) / elapsed.Seconds() / 1024 / 1024
 	speed := float64(atomic.LoadUint64(&totalBytesRead)) / elapsed.Seconds() / 1024 / 1024
 
-	scenarioLogger.Printf("Finish %s: duration=%s; small count total=%d; small count failed=%d; large count total=%d; large count failed=%d; megabytes=%d; avgSpeed=%.2f MB/s", name, elapsed, atomic.LoadUint64(&requestCountSmall), atomic.LoadUint64(&failureCountSmall), atomic.LoadUint64(&requestCountLarge), atomic.LoadUint64(&failureCountLarge), atomic.LoadUint64(&totalBytesRead)/1024/1024, speed)
+	scenarioLogger.Printf("Finish %s: duration=%s; small count total=%d; small count failed=%d; large count total=%d; large count failed=%d; megabytes=%d; avgSpeed=%.2f MB/s", name, elapsed, atomic.LoadUint64(&requestCountReadFullFile), atomic.LoadUint64(&failureCountReadFullFile), atomic.LoadUint64(&requestCountLarge), atomic.LoadUint64(&failureCountLarge), atomic.LoadUint64(&totalBytesRead)/1024/1024, speed)
 	csvLogger.Printf("%s,%s,%d,%d,%d,%d,%d,%d,%.2f,%s,%d,%d,%d,%d,%.2f,%.2f",
 		name,
 		mode,
@@ -597,8 +616,8 @@ func runScenario(parentCtx context.Context, name string, client *s3.Client, mode
 		rangeSmallEnd-rangeSmallStart+1,
 		elapsed.Minutes(),
 		*client.Options().BaseEndpoint,
-		atomic.LoadUint64(&requestCountSmall),
-		atomic.LoadUint64(&failureCountSmall),
+		atomic.LoadUint64(&requestCountReadFullFile),
+		atomic.LoadUint64(&failureCountReadFullFile),
 		atomic.LoadUint64(&requestCountLarge),
 		atomic.LoadUint64(&failureCountLarge),
 		float64(atomic.LoadUint64(&totalBytesRead))/1024/1024,
