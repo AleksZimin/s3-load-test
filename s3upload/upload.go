@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/manager"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -56,6 +57,7 @@ func main() {
 	s3SecretKey := flag.String("secret-key", S3_SECRET_KEY, "S3 secret access key")
 	force := flag.Bool("force", false, "Force execution even if files exist")
 	printProgressEvery := flag.Int("print-progress-every", defaultPrintProgressEvery, "Print progress every N files")
+	multipartUploadEnabled := flag.Bool("multipart-upload", false, "Enable multipart upload (default is false)")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
@@ -134,14 +136,13 @@ func main() {
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(*s3AccessKey, *s3SecretKey, "")),
 		config.WithHTTPClient(client),
 	)
+	if err != nil {
+		log.Fatal("AWS config error", zap.Error(err))
+	}
 
 	retryer := retry.NewStandard(func(o *retry.StandardOptions) {
 		o.RateLimiter = ratelimit.None // Disable rate limiting
 	})
-
-	if err != nil {
-		log.Fatal("AWS config error", zap.Error(err))
-	}
 
 	// s3Client := s3.NewFromConfig(cfg)
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
@@ -188,7 +189,7 @@ func main() {
 		go func(id int) {
 			defer wg.Done()
 			uploadWorker(ctx, s3Client, log.With(zap.Int("worker", id)), *prefix, jobs, sizeBytes,
-				&counter, &uploaded, &skipped, &errors, &retries, total, startTime, *force, *s3Bucket, int64(*printProgressEvery))
+				&counter, &uploaded, &skipped, &errors, &retries, total, startTime, *force, *s3Bucket, int64(*printProgressEvery), *multipartUploadEnabled)
 
 		}(i)
 	}
@@ -248,6 +249,7 @@ func uploadWorker(
 	force bool,
 	s3Bucket string,
 	printProgressEvery int64,
+	multipartUploadEnabled bool,
 ) {
 
 	for {
@@ -292,13 +294,26 @@ func uploadWorker(
 					atomic.AddInt64(errorCounter, 1)
 					continue
 				}
-				_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
-					Bucket:        aws.String(s3Bucket),
-					Key:           aws.String(objectName),
-					Body:          bytes.NewReader(buf),
-					ContentLength: aws.Int64(contentLength),
-					ContentType:   aws.String("application/octet-stream"),
-				})
+				if multipartUploadEnabled {
+					uploader := manager.NewUploader(s3Client, func(u *manager.Uploader) {
+						u.PartSize = 8 * 1024 * 1024 // 8 MiB  < 16 MiB
+						u.Concurrency = 4            // 4 parallel uploads
+					})
+
+					_, err = uploader.Upload(ctx, &s3.PutObjectInput{
+						Bucket: aws.String(s3Bucket),
+						Key:    aws.String(objectName),
+						Body:   bytes.NewReader(buf), // тот же буфер на 100 МБ
+					})
+				} else {
+					_, err = s3Client.PutObject(ctx, &s3.PutObjectInput{
+						Bucket:        aws.String(s3Bucket),
+						Key:           aws.String(objectName),
+						Body:          bytes.NewReader(buf),
+						ContentLength: aws.Int64(contentLength),
+						ContentType:   aws.String("application/octet-stream"),
+					})
+				}
 
 				if err != nil {
 					log.Error("upload error", zap.Error(err))

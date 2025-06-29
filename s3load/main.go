@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -145,14 +146,24 @@ func main() {
 	log.Printf("Rand seed: %v", randSeed)
 	rand.Seed(randSeed)
 
+	transport := &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
+		DialContext:         (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
+		ForceAttemptHTTP2:   true,
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 1000,
+		IdleConnTimeout:     90 * time.Second,
+	}
+	client := &http.Client{
+		Timeout:   time.Second * time.Duration(*timeoutSeconds),
+		Transport: transport,
+	}
+
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(S3_REGION),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(S3_ACCESS_KEY, S3_SECRET_KEY, "")),
-		config.WithHTTPClient(&http.Client{
-			Timeout: time.Second * time.Duration(*timeoutSeconds),
-		}),
+		config.WithHTTPClient(client),
 	)
-
 	if err != nil {
 		log.Fatalf("Failed to load AWS config: %v", err)
 		errorLogger.Printf("Failed to load AWS config: %v", err)
