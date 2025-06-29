@@ -54,8 +54,8 @@ var (
 const (
 	S3_REGION     = "us-east-1"
 	S3_BUCKET     = "test-bucket"
-	S3_ACCESS_KEY = "5VJ907S254RGGXD6GE90"
-	S3_SECRET_KEY = "qUYBucNNkGjAWptxihD2CAJhoemz7EOYw2gkzJvv"
+	S3_ACCESS_KEY = "minioadmin"
+	S3_SECRET_KEY = "minio-strong-secret"
 
 	MODE_AI             = "ai"
 	MODE_DOWNLOAD_RANGE = "download-range"
