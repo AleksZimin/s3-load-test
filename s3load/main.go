@@ -219,8 +219,8 @@ func main() {
 		// Create header for CSV file
 		csvLogger.Println("Scenario,Load type,Workers count,Range size for 100MB files (MB),Threads per worker,Start range for 1KB files,End range for 1KB files,Number of small files in range,Test duration (minutes),URL,Processed small files,Errors while processing small files,Processed large files,Errors while processing large files,Downloaded data (MB),Average download speed (MB/s)")
 
-		timeToLoad := 30 * time.Minute
-		timeSleep := 15 * time.Minute
+		timeToLoad := 10 * time.Minute
+		timeSleep := 5 * time.Minute
 
 		// timeToLoad := 10 * time.Second
 		// timeSleep := 5 * time.Second
