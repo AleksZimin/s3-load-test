@@ -86,7 +86,7 @@ func main() {
 	userFileNameSuffix := flag.String("file-suffix", time.Now().Format("2006-01-02_15-04"), "Suffix for log files (default is timestamp)")
 	flag.Uint64Var(&progressEvery, "progress-every", 1000, "Log progress every N requests (default 1000)")
 	flag.StringVar(&downloadType, "download-type", "large", "Download type (large or small)")
-	maxConnsPerHost := flag.Int("max-conns-per-host", 200, "Maximum parallel TCP connections per host (analogue of nginx keepalive)")
+	// maxConnsPerHost := flag.Int("max-conns-per-host", 200, "Maximum parallel TCP connections per host (analogue of nginx keepalive)")
 
 	flag.Parse()
 
@@ -155,10 +155,9 @@ func main() {
 	transport := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
 		DialContext:         (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext,
-		ForceAttemptHTTP2:   false,
-		MaxConnsPerHost:     *maxConnsPerHost,
-		MaxIdleConns:        *maxConnsPerHost * 2,
-		MaxIdleConnsPerHost: *maxConnsPerHost,
+		ForceAttemptHTTP2:   true,
+		MaxIdleConns:        1000,
+		MaxIdleConnsPerHost: 1000,
 		IdleConnTimeout:     90 * time.Second,
 		DisableCompression:  true,
 	}
