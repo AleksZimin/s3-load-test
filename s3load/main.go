@@ -36,6 +36,7 @@ var (
 	scenarioLogger               *log.Logger
 	csvLogger                    *log.Logger
 	S3_ENDPOINT                  string = "http://127.0.0.1:9000"
+	s3Bucket                     string
 	BALANCER_ENDPOINT            string = "https://10.210.0.67:19443"
 	BALANCER_ENDPOINT_WITH_CACHE string = "https://10.210.0.67:19444"
 	progressEvery                uint64
@@ -69,6 +70,10 @@ func main() {
 
 	mode := flag.String("mode", MODE_AI, fmt.Sprintf("Select mode (%s)", MODES))
 	s3EndpointURL := flag.String("s3-endpoint-url", S3_ENDPOINT, "S3 endpoint URL")
+	s3Region := flag.String("region", S3_REGION, "S3 region")
+	flag.StringVar(&s3Bucket, "bucket", S3_BUCKET, "S3 bucket name")
+	s3AccessKey := flag.String("access-key", S3_ACCESS_KEY, "S3 access key ID")
+	s3SecretKey := flag.String("secret-key", S3_SECRET_KEY, "S3 secret access key")
 	balancerEndpoint := flag.String("balancer-endpoint-url", BALANCER_ENDPOINT, "Balancer endpoint URL")
 	// balancerEndpointWithCache := flag.String("balancer-with-cache-endpoint-url", BALANCER_ENDPOINT_WITH_CACHE, "Balancer endpoint URL with cache")
 	workers := flag.Int("workers", 10, "Number of parallel workers")
@@ -163,8 +168,8 @@ func main() {
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(S3_REGION),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(S3_ACCESS_KEY, S3_SECRET_KEY, "")),
+		config.WithRegion(*s3Region),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(*s3AccessKey, *s3SecretKey, "")),
 		config.WithHTTPClient(client),
 	)
 	if err != nil {
@@ -448,7 +453,7 @@ func readFullFile(ctx context.Context, client *s3.Client, wid, cycle int, key st
 	attempt := 0
 	for {
 		out, err = client.GetObject(ctx, &s3.GetObjectInput{
-			Bucket: aws.String(S3_BUCKET),
+			Bucket: aws.String(s3Bucket),
 			Key:    aws.String(key),
 		})
 
@@ -521,7 +526,7 @@ func readLargeRange(ctx context.Context, client *s3.Client, wid, cycle int, key 
 	attempt := 0
 	for {
 		out, err = client.GetObject(ctx, &s3.GetObjectInput{
-			Bucket: aws.String(S3_BUCKET),
+			Bucket: aws.String(s3Bucket),
 			Key:    aws.String(key),
 			Range:  aws.String(rangeHeader),
 		})
