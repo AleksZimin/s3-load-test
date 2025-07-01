@@ -229,6 +229,11 @@ func main() {
 		timeToLoad := 10 * time.Minute
 		timeSleep := 5 * time.Minute
 
+		runScenario(ctx, "ai-workers-1-range1-with-balancer", s3clientWithBanacer, MODE_AI, 1, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		if ctx.Err() == nil {
+			waitWithContext(ctx, timeSleep)
+		}
+
 		// timeToLoad := 10 * time.Second
 		// timeSleep := 5 * time.Second
 
@@ -237,10 +242,10 @@ func main() {
 		// 	waitWithContext(ctx, timeSleep)
 		// }
 
-		// runScenario(ctx, "ai-workers-10-range1-with-balancer", s3clientWithBanacer, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
-		// if ctx.Err() == nil {
-		// 	waitWithContext(ctx, timeSleep)
-		// }
+		runScenario(ctx, "ai-workers-10-range1-with-balancer", s3clientWithBanacer, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		if ctx.Err() == nil {
+			waitWithContext(ctx, timeSleep)
+		}
 
 		// runScenario(ctx, "ai-workers-10-range1-with-balancer-and-cache", s3clientWithBalancerAndCache, MODE_AI, 10, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		// if ctx.Err() == nil {
@@ -252,10 +257,12 @@ func main() {
 		// 	waitWithContext(ctx, timeSleep)
 		// }
 
-		// runScenario(ctx, "ai-workers-20-range1-with-balancer", s3clientWithBanacer, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
-		// if ctx.Err() == nil {
-		// 	waitWithContext(ctx, timeSleep)
-		// }
+		runScenario(ctx, "ai-workers-20-range1-with-balancer", s3clientWithBanacer, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		if ctx.Err() == nil {
+			waitWithContext(ctx, timeSleep)
+		}
+
+		runScenario(ctx, "ai-workers-30-range1-with-balancer", s3clientWithBanacer, MODE_AI, 30, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 
 		// runScenario(ctx, "ai-workers-20-range1-with-balancer-and-cache", s3clientWithBalancerAndCache, MODE_AI, 20, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		// if ctx.Err() == nil {
@@ -297,10 +304,10 @@ func main() {
 		// 	waitWithContext(ctx, timeSleep)
 		// }
 
-		runScenario(ctx, "download-range-workers-1000-range1-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 1000, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
-		if ctx.Err() == nil {
-			waitWithContext(ctx, timeSleep)
-		}
+		// runScenario(ctx, "download-range-workers-1000-range1-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 1000, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
+		// if ctx.Err() == nil {
+		// 	waitWithContext(ctx, timeSleep)
+		// }
 
 		// runScenario(ctx, "download-range-workers-100-range1", s3Client, MODE_DOWNLOAD_RANGE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 1, timeToLoad)
 		// if ctx.Err() == nil {
@@ -317,10 +324,10 @@ func main() {
 		// 	waitWithContext(ctx, timeSleep)
 		// }
 
-		runScenario(ctx, "download-range-workers-1000-range10-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 1000, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
-		if ctx.Err() == nil {
-			waitWithContext(ctx, timeSleep)
-		}
+		// runScenario(ctx, "download-range-workers-1000-range10-with-balancer", s3clientWithBanacer, MODE_DOWNLOAD_RANGE, 1000, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
+		// if ctx.Err() == nil {
+		// 	waitWithContext(ctx, timeSleep)
+		// }
 
 		// runScenario(ctx, "download-range-workers-100-range10", s3Client, MODE_DOWNLOAD_RANGE, 100, *cycles, *smallStart, *smallEnd, *threadsAmount, 10, timeToLoad)
 		// if ctx.Err() == nil {
