@@ -74,7 +74,6 @@ const (
 	MODE_DWH            = "dwh"
 	MODE_DOWNLOAD_RANGE = "download-range"
 	MODE_DOWNLOAD_FULL  = "download-full"
-	MODE_UPLOAD_RANGE   = "upload-range"
 	MODE_UPLOAD_FULL    = "upload-full"
 
 	MODE_ALLSCENARIO = "all-scenarios"
@@ -95,7 +94,7 @@ func main() {
 	downloadSmallStart := flag.Int("download-small-start", 1, "Start of small file range for download")
 	downloadSmallEnd := flag.Int("download-small-end", 10000, "End of small file range for download")
 	downloadThreadsCount := flag.Int("download-threads-count", 1000, "Number of threads to read file simultaneously in DWH mode")
-	uploadWorkersCount := flag.Int("upload-workers-count", 10, "Number of parallel workers to upload files")
+	uploadWorkersCount := flag.Int("upload-workers-count", 0, "Number of parallel workers to upload files")
 	uploadSmallStart := flag.Int("upload-small-start", 20000, "Start of small file range for upload")
 	uploadSmallEnd := flag.Int("upload-small-end", 30000, "End of small file range for upload")
 	uploadThreadsCount := flag.Int("upload-threads-count", 1000, "Number of threads to upload file simultaneously in DWH mode")
@@ -112,7 +111,7 @@ func main() {
 	flag.Parse()
 
 	if *downloadWorkersCount <= 0 || *downloadSmallStart < 0 || *downloadSmallEnd <= 0 || *downloadSmallStart >= *downloadSmallEnd ||
-		*uploadWorkersCount <= 0 || *uploadSmallStart < 0 || *uploadSmallEnd <= 0 || *uploadSmallStart >= *uploadSmallEnd ||
+		*uploadWorkersCount < 0 || *uploadSmallStart < 0 || *uploadSmallEnd <= 0 || *uploadSmallStart >= *uploadSmallEnd ||
 		*downloadThreadsCount <= 0 || *uploadThreadsCount <= 0 || *cycles < -1 || *rangeSizeMb <= 0 || *timeoutSeconds < 0 ||
 		*maxConnsPerHost <= 0 || *s3EndpointURL == "" || *s3Region == "" || *s3AccessKey == "" || *s3SecretKey == "" ||
 		downloadType != "large" && downloadType != "small" || *mode == "" ||
@@ -387,7 +386,13 @@ func main() {
 		scenarioLogger.Printf("All scenarios finished")
 		return
 	default:
+		if *uploadWorkersCount > 0 {
+			go func() {
+				runLoadTest(ctx, s3Client, *mode, *uploadWorkersCount, *cycles, *uploadSmallStart, *uploadSmallEnd, *uploadThreadsCount, *rangeSizeMb)
+			}()
+		}
 		runLoadTest(ctx, s3Client, *mode, *downloadWorkersCount, *cycles, *downloadSmallStart, *downloadSmallEnd, *downloadThreadsCount, *rangeSizeMb)
+
 	}
 }
 
@@ -776,7 +781,7 @@ func uploadFullFile(ctx context.Context, client *s3.Client, workerID, cycle int,
 	simultaneous := atomic.AddInt64(&uploadFullFileRunning, -1)
 	if atomic.LoadUint64(&requestCountUploadFullFile)%progressEvery == 0 {
 		log.Printf(
-			"[W%d] Cycle %d: file %s (uploaded %d B of total %.2f MiB) in %s of total %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
+			"[UPLOAD][W%d] Cycle %d: file %s (uploaded %d B of total %.2f MiB) in %s of total %s (this %.2f MB/s, total %.2f MB/s) simultaneous %v, failed %v of %v",
 			workerID,
 			cycle,
 			key,
