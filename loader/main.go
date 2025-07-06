@@ -92,12 +92,12 @@ func main() {
 	balancerEndpoint := flag.String("balancer-endpoint-url", BALANCER_ENDPOINT, "Balancer endpoint URL")
 	// balancerEndpointWithCache := flag.String("balancer-with-cache-endpoint-url", BALANCER_ENDPOINT_WITH_CACHE, "Balancer endpoint URL with cache")
 	downloadWorkersCount := flag.Int("download-workers-count", 10, "Number of parallel workers to download files")
-	downloadSmallStart := flag.Int("download-small-start", 0, "Start of small file range for download")
-	downloadSmallEnd := flag.Int("download-small-end", 0, "End of small file range for download")
+	downloadSmallStart := flag.Int("download-small-start", 1, "Start of small file range for download")
+	downloadSmallEnd := flag.Int("download-small-end", 10000, "End of small file range for download")
 	downloadThreadsCount := flag.Int("download-threads-count", 1000, "Number of threads to read file simultaneously in DWH mode")
 	uploadWorkersCount := flag.Int("upload-workers-count", 10, "Number of parallel workers to upload files")
-	uploadSmallStart := flag.Int("upload-small-start", 0, "Start of small file range for upload")
-	uploadSmallEnd := flag.Int("upload-small-end", 0, "End of small file range for upload")
+	uploadSmallStart := flag.Int("upload-small-start", 20000, "Start of small file range for upload")
+	uploadSmallEnd := flag.Int("upload-small-end", 30000, "End of small file range for upload")
 	uploadThreadsCount := flag.Int("upload-threads-count", 1000, "Number of threads to upload file simultaneously in DWH mode")
 	cycles := flag.Int("cycles", -1, "Number of cycles per worker")
 	rangeSizeMb := flag.Int("range-size-mb", 1, "Large file download or upload range size")
@@ -116,8 +116,7 @@ func main() {
 		*downloadThreadsCount <= 0 || *uploadThreadsCount <= 0 || *cycles < -1 || *rangeSizeMb <= 0 || *timeoutSeconds < 0 ||
 		*maxConnsPerHost <= 0 || *s3EndpointURL == "" || *s3Region == "" || *s3AccessKey == "" || *s3SecretKey == "" ||
 		downloadType != "large" && downloadType != "small" || *mode == "" ||
-		uploadType != "large" && uploadType != "small" ||
-		*mode != MODE_DWH && *mode != MODE_DOWNLOAD_RANGE && *mode != MODE_DOWNLOAD_FULL && *mode != MODE_ALLSCENARIO {
+		uploadType != "large" && uploadType != "small" {
 		fmt.Printf("Invalid parameters!\n\n")
 		fmt.Printf(`Parameter(s) error!
 		
